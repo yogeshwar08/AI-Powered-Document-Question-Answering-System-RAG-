@@ -7,11 +7,18 @@ from langchain_community.vectorstores import FAISS
 
 
 # ============================================================
+# BASE PATH
+# ============================================================
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+# ============================================================
 # SETTINGS
 # ============================================================
 
-DOCUMENTS_PATH = "documents"
-VECTORSTORE_PATH = "vectorstore"
+DOCUMENTS_PATH = BASE_DIR / "documents"
+VECTORSTORE_PATH = BASE_DIR / "vectorstore"
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -24,27 +31,54 @@ def load_documents():
 
     documents = []
 
+    # Make sure documents folder exists
+    DOCUMENTS_PATH.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
     pdf_files = list(
-        Path(DOCUMENTS_PATH).glob("*.pdf")
+        DOCUMENTS_PATH.glob("*.pdf")
     )
 
     if not pdf_files:
-        print("No PDF files found.")
+
+        print(
+            f"No PDF files found in: "
+            f"{DOCUMENTS_PATH}"
+        )
+
         return documents
 
     for pdf_file in pdf_files:
 
-        print(f"Loading: {pdf_file.name}")
-
-        loader = PyPDFLoader(
-            str(pdf_file)
+        print(
+            f"Loading PDF: {pdf_file.name}"
         )
 
-        pdf_documents = loader.load()
+        try:
 
-        documents.extend(
-            pdf_documents
-        )
+            loader = PyPDFLoader(
+                str(pdf_file)
+            )
+
+            pdf_documents = loader.load()
+
+            documents.extend(
+                pdf_documents
+            )
+
+        except Exception as e:
+
+            print(
+                f"Error loading "
+                f"{pdf_file.name}: {e}"
+            )
+
+    print(
+        f"Total PDF pages loaded: "
+        f"{len(documents)}"
+    )
 
     return documents
 
@@ -55,17 +89,23 @@ def load_documents():
 
 def split_documents(documents):
 
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=150,
+    text_splitter = (
+        RecursiveCharacterTextSplitter(
+            chunk_size=800,
+            chunk_overlap=150,
+            length_function=len,
+        )
     )
 
-    chunks = text_splitter.split_documents(
-        documents
+    chunks = (
+        text_splitter.split_documents(
+            documents
+        )
     )
 
     print(
-        f"Total chunks created: {len(chunks)}"
+        f"Total chunks created: "
+        f"{len(chunks)}"
     )
 
     return chunks
@@ -77,8 +117,20 @@ def split_documents(documents):
 
 def create_embeddings():
 
+    print(
+        "Loading embedding model:"
+    )
+
+    print(
+        EMBEDDING_MODEL
+    )
+
     embeddings = HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL
+    )
+
+    print(
+        "Embedding model loaded successfully."
     )
 
     return embeddings
@@ -90,22 +142,70 @@ def create_embeddings():
 
 def create_vectorstore(chunks):
 
+    if not chunks:
+
+        raise ValueError(
+            "No document chunks available "
+            "to create vector store."
+        )
+
+    print(
+        "Creating embeddings..."
+    )
+
     embeddings = create_embeddings()
+
+    print(
+        "Creating FAISS vector store..."
+    )
 
     vectorstore = FAISS.from_documents(
         chunks,
-        embeddings,
+        embeddings
     )
 
+    # Create directory
+    VECTORSTORE_PATH.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    # Save FAISS index
     vectorstore.save_local(
-        VECTORSTORE_PATH
+        str(VECTORSTORE_PATH)
     )
 
     print(
         "FAISS vector store created successfully."
     )
 
+    print(
+        f"Saved to: {VECTORSTORE_PATH}"
+    )
+
     return vectorstore
+
+
+# ============================================================
+# CHECK VECTORSTORE
+# ============================================================
+
+def vectorstore_exists():
+
+    index_file = (
+        VECTORSTORE_PATH /
+        "index.faiss"
+    )
+
+    metadata_file = (
+        VECTORSTORE_PATH /
+        "index.pkl"
+    )
+
+    return (
+        index_file.exists()
+        and metadata_file.exists()
+    )
 
 
 # ============================================================
@@ -114,22 +214,70 @@ def create_vectorstore(chunks):
 
 def load_vectorstore():
 
-    vectorstore_path = Path(
-        VECTORSTORE_PATH
+    # --------------------------------------------------------
+    # If vectorstore doesn't exist, build it automatically
+    # --------------------------------------------------------
+
+    if not vectorstore_exists():
+
+        print(
+            "FAISS vector store not found."
+        )
+
+        print(
+            "Attempting to build vector store..."
+        )
+
+        documents = load_documents()
+
+        if not documents:
+
+            raise FileNotFoundError(
+                "No PDF documents found. "
+                f"Please add PDF files to: "
+                f"{DOCUMENTS_PATH}"
+            )
+
+        chunks = split_documents(
+            documents
+        )
+
+        return create_vectorstore(
+            chunks
+        )
+
+    # --------------------------------------------------------
+    # Load existing vectorstore
+    # --------------------------------------------------------
+
+    print(
+        "Loading existing FAISS vector store..."
     )
 
-    if not vectorstore_path.exists():
-
-        raise FileNotFoundError(
-            "The 'vectorstore' folder was not found."
-        )
+    print(
+        f"Vectorstore path: "
+        f"{VECTORSTORE_PATH}"
+    )
 
     embeddings = create_embeddings()
 
-    vectorstore = FAISS.load_local(
-        VECTORSTORE_PATH,
-        embeddings,
-        allow_dangerous_deserialization=True,
+    try:
+
+        vectorstore = FAISS.load_local(
+            str(VECTORSTORE_PATH),
+            embeddings,
+            allow_dangerous_deserialization=True
+        )
+
+    except Exception as e:
+
+        raise RuntimeError(
+            "Failed to load FAISS vector store. "
+            f"Error: {e}"
+        )
+
+    print(
+        "FAISS vector store loaded successfully."
     )
 
     return vectorstore
@@ -141,71 +289,102 @@ def load_vectorstore():
 
 def retrieve_documents(
     question,
-    k=4,
+    k=4
 ):
+
+    if not question or not question.strip():
+
+        raise ValueError(
+            "Question cannot be empty."
+        )
 
     vectorstore = load_vectorstore()
 
-    documents = vectorstore.similarity_search(
-        question,
-        k=k,
+    documents = (
+        vectorstore.similarity_search(
+            question,
+            k=k
+        )
     )
 
     return documents
 
 
 # ============================================================
-# BUILD VECTOR DATABASE
+# BUILD VECTOR DATABASE MANUALLY
 # ============================================================
 
-if __name__ == "__main__":
+def build_vector_database():
 
+    print()
     print(
-        "\n========================================"
+        "========================================"
     )
+    print(
+        "       Building RAG Vector Database"
+    )
+    print(
+        "========================================"
+    )
+    print()
 
-    print(
-        "     Building RAG Vector Database"
-    )
-
-    print(
-        "========================================\n"
-    )
+    # --------------------------------------------------------
+    # Load PDFs
+    # --------------------------------------------------------
 
     documents = load_documents()
 
     print(
-        f"Documents loaded: {len(documents)}"
+        f"Documents loaded: "
+        f"{len(documents)}"
     )
 
     if not documents:
 
+        print()
         print(
-            "\nPlease put at least one PDF inside:"
+            "Please put at least one PDF inside:"
         )
 
         print(
-            "documents/"
+            DOCUMENTS_PATH
         )
 
-        raise SystemExit
+        return
+
+    # --------------------------------------------------------
+    # Split PDFs
+    # --------------------------------------------------------
 
     chunks = split_documents(
         documents
     )
 
+    # --------------------------------------------------------
+    # Create vectorstore
+    # --------------------------------------------------------
+
     create_vectorstore(
         chunks
     )
 
+    print()
     print(
-        "\n========================================"
+        "========================================"
     )
+    print(
+        "       Vector Database Ready"
+    )
+    print(
+        "========================================"
+    )
+    print()
 
-    print(
-        "   Vector Database Ready"
-    )
 
-    print(
-        "========================================\n"
-    )
+# ============================================================
+# MAIN
+# ============================================================
+
+if __name__ == "__main__":
+
+    build_vector_database()
