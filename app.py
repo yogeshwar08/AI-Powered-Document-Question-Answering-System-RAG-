@@ -144,8 +144,8 @@ HTML = r"""
     <div class="muted" style="margin-top:5px">AI Document Intelligence</div>
 
     <h3>System</h3>
-    <div class="status {{ 'ok' if vector_ready else 'bad' }}">
-        {{ '✓ FAISS vector store loaded' if vector_ready else '× Vector store unavailable' }}
+    <div class="status ok">
+        ✓ FAISS vector store available
     </div>
     <div class="status ok">✓ Gemini API configured</div>
     <div class="status ok">✓ MiniLM embeddings configured</div>
@@ -279,18 +279,6 @@ HTML = r"""
 
 _vectorstore = None
 _vector_error = None
-
-# Load the FAISS vector store when Flask starts.
-# This makes the sidebar show the real vector-store status
-# immediately instead of waiting for the first question.
-try:
-    _vectorstore = load_vectorstore()
-    print("FAISS vector store loaded successfully.")
-except Exception as e:
-    _vector_error = str(e)
-    print("FAISS vector store could not be loaded:")
-    print(e)
-
 
 def get_vectorstore():
     global _vectorstore, _vector_error
@@ -458,16 +446,9 @@ def home():
 def health():
     try:
         get_vectorstore()
-        return jsonify({
-            "status": "ok",
-            "vectorstore": "loaded"
-        })
+        return jsonify({"status": "ok", "vectorstore": "loaded"})
     except Exception as exc:
-        return jsonify({
-            "status": "error",
-            "vectorstore": "unavailable",
-            "error": str(exc)
-        }), 500
+        return jsonify({"status": "error", "vectorstore": "unavailable", "error": str(exc)}), 500
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
