@@ -1,9 +1,11 @@
-Flask
+﻿Flask
 gunicorn
 langchain
+langchain-core
 langchain-community
-langchain-huggingface
 langchain-text-splitters
+langchain-huggingface
+langchain-google-genai
 sentence-transformers
 faiss-cpu
 pypdf
@@ -11,3 +13,5 @@ transformers
 torch
 google-genai
 python-dotenv
+Markdown
+bleach

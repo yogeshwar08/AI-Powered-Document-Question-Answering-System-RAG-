@@ -1,25 +1,78 @@
+# ============================================================
+# AI-POWERED DOCUMENT QUESTION ANSWERING
+# RAG QUERY ENGINE
+#
+# 6. USER QUERY
+# 7. RETRIEVAL
+# 8. AUGMENTATION
+# 9. GENERATE ANSWER
+# ============================================================
+
+
 import os
 import time
 
+
+# ============================================================
+# ENVIRONMENT
+# ============================================================
+
 from dotenv import load_dotenv
-from google import genai
 
-from main import retrieve_documents
-
-
-# ============================================================
-# LOAD ENVIRONMENT VARIABLES
-# ============================================================
 
 load_dotenv()
+
+
+# ============================================================
+# LANGCHAIN GEMINI
+# ============================================================
+
+from langchain_google_genai import (
+    ChatGoogleGenerativeAI
+)
+
+
+# ============================================================
+# LANGCHAIN PROMPT
+# ============================================================
+
+from langchain_core.prompts import (
+    ChatPromptTemplate
+)
+
+
+# ============================================================
+# OUTPUT PARSER
+# ============================================================
+
+from langchain_core.output_parsers import (
+    StrOutputParser
+)
+
+
+# ============================================================
+# PROJECT FUNCTIONS
+# ============================================================
+
+from main import (
+    retrieve_documents,
+    build_context,
+    get_sources
+)
+
+
+# ============================================================
+# API SETTINGS
+# ============================================================
 
 GOOGLE_API_KEY = os.getenv(
     "GOOGLE_API_KEY"
 )
 
+
 LLM_MODEL = os.getenv(
     "LLM_MODEL",
-    "gemini-3-flash-preview"
+    "gemini-2.5-flash"
 )
 
 
@@ -29,342 +82,372 @@ LLM_MODEL = os.getenv(
 
 if not GOOGLE_API_KEY:
 
-    raise ValueError(
-        "GOOGLE_API_KEY is missing. "
-        "Check your .env file."
+    raise RuntimeError(
+        "GOOGLE_API_KEY is not configured."
     )
 
 
 # ============================================================
-# GEMINI CLIENT
+# GEMINI LLM
 # ============================================================
 
-client = genai.Client(
-    api_key=GOOGLE_API_KEY
+llm = (
+    ChatGoogleGenerativeAI(
+
+        model=LLM_MODEL,
+
+        google_api_key=(
+            GOOGLE_API_KEY
+        ),
+
+        temperature=0
+    )
 )
 
 
 # ============================================================
-# HEADER
+# STEP 8
+# AUGMENTATION PROMPT
 # ============================================================
 
-print("\n========================================")
-print("       AI-Powered Document Q&A")
-print("========================================")
+prompt = (
+    ChatPromptTemplate.from_template(
+        """
+You are DocuMind, a professional
+AI-powered document question-answering
+assistant.
 
+Your job is to answer the user's
+question using the retrieved document
+context.
 
-# ============================================================
-# QUESTION
-# ============================================================
-
-question = input(
-    "\nAsk a question about your PDF: "
-).strip()
-
-
-if not question:
-
-    print(
-        "\nPlease enter a question."
-    )
-
-    raise SystemExit
-
-
-# ============================================================
-# RETRIEVE DOCUMENTS
-# ============================================================
-
-print(
-    "\nSearching PDF..."
-)
-
-
-try:
-
-    documents = retrieve_documents(
-        question,
-        k=4,
-    )
-
-except Exception as e:
-
-    print(
-        "\nError while searching PDF:"
-    )
-
-    print(e)
-
-    raise SystemExit
-
-
-if not documents:
-
-    print(
-        "\nNo relevant information found."
-    )
-
-    raise SystemExit
-
-
-# ============================================================
-# BUILD CONTEXT
-# ============================================================
-
-context_parts = []
-
-
-for i, document in enumerate(
-    documents,
-    start=1,
-):
-
-    page = document.metadata.get(
-        "page",
-        "Unknown",
-    )
-
-    if isinstance(page, int):
-
-        page += 1
-
-
-    context_parts.append(
-        f"""
-SOURCE {i}
-PAGE: {page}
-
-{document.page_content}
-"""
-    )
-
-
-context = "\n".join(
-    context_parts
-)
-
-
-# ============================================================
-# PROMPT
-# ============================================================
-
-prompt = f"""
-You are a professional Python programming
-interview assistant.
-
-The user asks a question about a PDF.
-
-Use the retrieved PDF context below.
-
-RETRIEVED PDF CONTENT
-=====================
+==============================
+RETRIEVED DOCUMENT CONTEXT
+==============================
 
 {context}
 
+==============================
 USER QUESTION
-=============
+==============================
 
 {question}
 
+==============================
 INSTRUCTIONS
-============
+==============================
 
-1. Understand exactly what the user is asking.
+1. Use the retrieved document context
+   whenever relevant.
 
-2. Use the retrieved PDF context whenever
-   it contains relevant information.
+2. Do not invent facts about the
+   provided documents.
 
-3. If the PDF contains an answer,
-   explain it clearly.
+3. If the answer is not available
+   in the retrieved context, clearly
+   say that the information is not
+   available in the provided documents.
 
-4. If the PDF contains only the question,
-   generate the correct answer yourself.
+4. If the document contains a question
+   but not its solution, you may solve
+   the question using your knowledge,
+   but clearly distinguish the generated
+   solution from information found
+   in the document.
 
 5. For programming questions, provide
-   complete executable Python code.
+   complete executable Python code
+   when appropriate.
 
-6. Explain the code briefly.
+6. Explain important technical concepts
+   clearly and professionally.
 
-7. Do not invent facts about the PDF.
+7. Give a direct, technically accurate
+   and interview-ready response.
 
-8. Clearly distinguish generated solutions
-   from information found in the PDF.
+8. Do not claim that generated information
+   came from the document.
 
-9. Keep the answer suitable for a
-   Python interview.
-
-Return:
-
-ANSWER:
-<clear answer>
-
-PYTHON CODE:
-<code if applicable>
-
-EXPLANATION:
-<short explanation>
+==============================
+FINAL ANSWER
+==============================
 """
-
-
-# ============================================================
-# GEMINI GENERATION WITH RETRIES
-# ============================================================
-
-print(
-    "\nGenerating answer..."
+    )
 )
 
 
-answer = None
+# ============================================================
+# STEP 9
+# LANGCHAIN RAG CHAIN
+# ============================================================
+
+rag_chain = (
+
+    prompt
+
+    |
+
+    llm
+
+    |
+
+    StrOutputParser()
+
+)
 
 
-for attempt in range(3):
+# ============================================================
+# COMPLETE RAG PIPELINE
+# ============================================================
 
-    try:
+def answer_query(
+    question,
+    top_k=4
+):
 
-        response = client.models.generate_content(
-            model=LLM_MODEL,
-            contents=prompt,
+    # ========================================================
+    # STEP 6
+    # USER QUERY
+    # ========================================================
+
+    if not question:
+
+        raise ValueError(
+            "Question cannot be empty."
         )
 
-        answer = response.text
+    question = (
+        question.strip()
+    )
 
-        break
+    # Start total timer
+
+    total_start = (
+        time.perf_counter()
+    )
 
 
-    except Exception as e:
+    # ========================================================
+    # STEP 7
+    # SEMANTIC RETRIEVAL
+    # ========================================================
 
-        error_message = str(e)
+    retrieval_start = (
+        time.perf_counter()
+    )
 
-        print(
-            f"\nGemini request failed "
-            f"(attempt {attempt + 1}/3)"
+    documents = (
+        retrieve_documents(
+            question,
+            k=top_k
         )
+    )
 
-        print(
-            error_message
+    retrieval_time = (
+        time.perf_counter()
+        -
+        retrieval_start
+    )
+
+
+    # ========================================================
+    # CHECK RETRIEVAL
+    # ========================================================
+
+    if not documents:
+
+        return {
+
+            "answer":
+                "No relevant information "
+                "was found in the knowledge base.",
+
+            "documents": [],
+
+            "sources": [],
+
+            "retrieval_time":
+                retrieval_time,
+
+            "generation_time": 0,
+
+            "total_time":
+                time.perf_counter()
+                -
+                total_start
+        }
+
+
+    # ========================================================
+    # STEP 8
+    # AUGMENTATION
+    # ========================================================
+
+    context = (
+        build_context(
+            documents
         )
+    )
 
-        # Retry temporary server errors
-        if (
-            "502" in error_message
-            or "503" in error_message
-            or "504" in error_message
-            or "UNAVAILABLE" in error_message
-            or "INTERNAL" in error_message
-        ):
 
-            if attempt < 2:
+    # ========================================================
+    # STEP 9
+    # GENERATE ANSWER
+    # ========================================================
 
-                wait_time = 2 ** attempt
+    print()
+    print("=" * 60)
+    print("STEP 9: ANSWER GENERATION")
+    print("=" * 60)
 
-                print(
-                    f"Retrying in "
-                    f"{wait_time} seconds..."
-                )
+    generation_start = (
+        time.perf_counter()
+    )
 
-                time.sleep(
-                    wait_time
-                )
+    answer = (
+        rag_chain.invoke(
 
-                continue
+            {
+                "context":
+                    context,
 
-        # Do not repeatedly retry
-        # authentication/model/quota errors
+                "question":
+                    question
+            }
+
+        )
+    )
+
+    generation_time = (
+        time.perf_counter()
+        -
+        generation_start
+    )
+
+
+    # ========================================================
+    # TOTAL TIME
+    # ========================================================
+
+    total_time = (
+        time.perf_counter()
+        -
+        total_start
+    )
+
+
+    # ========================================================
+    # RETURN COMPLETE RESULT
+    # ========================================================
+
+    return {
+
+        "answer":
+            answer,
+
+        "documents":
+            documents,
+
+        "sources":
+            get_sources(
+                documents
+            ),
+
+        "retrieval_time":
+            retrieval_time,
+
+        "generation_time":
+            generation_time,
+
+        "total_time":
+            total_time
+    }
+
+
+# ============================================================
+# COMMAND LINE TEST
+# ============================================================
+
+if __name__ == "__main__":
+
+    print()
+    print("=" * 60)
+    print("       AI-POWERED DOCUMENT Q&A")
+    print("       LANGCHAIN RAG SYSTEM")
+    print("=" * 60)
+
+    question = input(
+        "\nAsk a question about your PDF: "
+    ).strip()
+
+    if not question:
+
         print(
-            "\nGemini request could not be completed."
+            "\nPlease enter a question."
         )
 
         raise SystemExit
 
 
-# ============================================================
-# CHECK ANSWER
-# ============================================================
+    try:
 
-if not answer:
-
-    print(
-        "\nGemini returned no answer."
-    )
-
-    raise SystemExit
+        result = (
+            answer_query(
+                question,
+                top_k=4
+            )
+        )
 
 
-# ============================================================
-# DISPLAY ANSWER
-# ============================================================
-
-print(
-    "\n========================================"
-)
-
-print(
-    "                 ANSWER"
-)
-
-print(
-    "========================================\n"
-)
-
-print(
-    answer
-)
-
-
-# ============================================================
-# DISPLAY SOURCES
-# ============================================================
-
-print(
-    "\n========================================"
-)
-
-print(
-    "                 SOURCES"
-)
-
-print(
-    "========================================"
-)
-
-
-shown_sources = set()
-
-
-for document in documents:
-
-    source = document.metadata.get(
-        "source",
-        "Unknown",
-    )
-
-    page = document.metadata.get(
-        "page",
-        "Unknown",
-    )
-
-    if isinstance(page, int):
-
-        page += 1
-
-
-    source_info = (
-        f"{source} - Page {page}"
-    )
-
-
-    if source_info not in shown_sources:
+        print()
+        print("=" * 60)
+        print("                    ANSWER")
+        print("=" * 60)
 
         print(
-            source_info
-        )
-
-        shown_sources.add(
-            source_info
+            result["answer"]
         )
 
 
-print(
-    "\nDone."
-)
+        print()
+        print("=" * 60)
+        print("                    SOURCES")
+        print("=" * 60)
+
+
+        for source, page in (
+            result["sources"]
+        ):
+
+            print(
+                f"{source} - "
+                f"Page {page}"
+            )
+
+
+        print()
+        print("=" * 60)
+        print("                    METRICS")
+        print("=" * 60)
+
+        print(
+            f"Retrieval Time: "
+            f"{result['retrieval_time']:.3f}s"
+        )
+
+        print(
+            f"Generation Time: "
+            f"{result['generation_time']:.3f}s"
+        )
+
+        print(
+            f"Total Response Time: "
+            f"{result['total_time']:.3f}s"
+        )
+
+
+    except Exception as e:
+
+        print(
+            f"\nRAG pipeline failed: {e}"
+        )

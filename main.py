@@ -1,59 +1,162 @@
+# ============================================================
+# DOCUMIND RAG
+# AI-POWERED DOCUMENT QUESTION ANSWERING SYSTEM
+#
+# RAG PIPELINE
+#
+# 1. COLLECTION OF KNOWLEDGE BASE
+# 2. PARSING AND PREPROCESSING
+# 3. CHUNKING
+# 4. EMBEDDING
+# 5. VECTOR DATABASE
+# 6. USER QUERY
+# 7. SEARCH QUERY AGAINST VECTOR DATABASE
+# 8. AUGMENTATION
+# 9. GENERATE ANSWER
+# ============================================================
+
+
 from pathlib import Path
 
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
+
+# ============================================================
+# LANGCHAIN IMPORTS
+# ============================================================
+
+from langchain_community.document_loaders import (
+    PyPDFLoader
+)
+
+from langchain_text_splitters import (
+    RecursiveCharacterTextSplitter
+)
+
+from langchain_huggingface import (
+    HuggingFaceEmbeddings
+)
+
+from langchain_community.vectorstores import (
+    FAISS
+)
 
 
 # ============================================================
-# BASE PATH
+# BASE DIRECTORY
 # ============================================================
 
-BASE_DIR = Path(__file__).resolve().parent
-
-
-# ============================================================
-# SETTINGS
-# ============================================================
-
-DOCUMENTS_PATH = BASE_DIR / "documents"
-VECTORSTORE_PATH = BASE_DIR / "vectorstore"
-
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+BASE_DIR = Path(
+    __file__
+).resolve().parent
 
 
 # ============================================================
-# LOAD PDF DOCUMENTS
+# PROJECT DIRECTORIES
 # ============================================================
 
-def load_documents():
+DOCUMENTS_PATH = (
+    BASE_DIR / "documents"
+)
 
-    documents = []
+VECTORSTORE_PATH = (
+    BASE_DIR / "vectorstore"
+)
 
-    # Make sure documents folder exists
+
+# ============================================================
+# EMBEDDING MODEL
+# ============================================================
+
+EMBEDDING_MODEL = (
+    "sentence-transformers/all-MiniLM-L6-v2"
+)
+
+
+# ============================================================
+# CHUNKING CONFIGURATION
+# ============================================================
+
+CHUNK_SIZE = 800
+
+CHUNK_OVERLAP = 150
+
+
+# ============================================================
+# RETRIEVAL CONFIGURATION
+# ============================================================
+
+DEFAULT_TOP_K = 4
+
+
+# ============================================================
+# STEP 1
+# COLLECTION OF KNOWLEDGE BASE
+# ============================================================
+
+def collect_knowledge_base():
+
+    print()
+    print("=" * 65)
+    print("STEP 1: COLLECTION OF KNOWLEDGE BASE")
+    print("=" * 65)
+
+    # Create documents directory
+    # if it does not exist
+
     DOCUMENTS_PATH.mkdir(
         parents=True,
         exist_ok=True
     )
 
-    pdf_files = list(
+    # Find PDF documents
+
+    pdf_files = sorted(
         DOCUMENTS_PATH.glob("*.pdf")
     )
 
     if not pdf_files:
 
-        print(
-            f"No PDF files found in: "
-            f"{DOCUMENTS_PATH}"
+        raise FileNotFoundError(
+            f"No PDF documents found in:\n"
+            f"{DOCUMENTS_PATH}\n\n"
+            f"Please place your PDF files inside "
+            f"the 'documents' folder."
         )
 
-        return documents
+    print(
+        f"PDF documents found: "
+        f"{len(pdf_files)}"
+    )
 
     for pdf_file in pdf_files:
 
         print(
-            f"Loading PDF: {pdf_file.name}"
+            f"  ✓ {pdf_file.name}"
+        )
+
+    return pdf_files
+
+
+# ============================================================
+# STEP 2
+# PARSING AND PREPROCESSING
+# ============================================================
+
+def parse_documents(
+    pdf_files
+):
+
+    print()
+    print("=" * 65)
+    print("STEP 2: PARSING AND PREPROCESSING")
+    print("=" * 65)
+
+    documents = []
+
+    for pdf_file in pdf_files:
+
+        print(
+            f"Parsing: "
+            f"{pdf_file.name}"
         )
 
         try:
@@ -62,21 +165,48 @@ def load_documents():
                 str(pdf_file)
             )
 
-            pdf_documents = loader.load()
-
-            documents.extend(
-                pdf_documents
+            pdf_documents = (
+                loader.load()
             )
 
-        except Exception as e:
+            # Add source metadata
+
+            for document in pdf_documents:
+
+                document.metadata[
+                    "source"
+                ] = pdf_file.name
+
+                documents.append(
+                    document
+                )
 
             print(
-                f"Error loading "
-                f"{pdf_file.name}: {e}"
+                f"  ✓ Pages loaded: "
+                f"{len(pdf_documents)}"
             )
 
+        except Exception as error:
+
+            print(
+                f"  ✗ Failed to parse "
+                f"{pdf_file.name}"
+            )
+
+            print(
+                f"    Error: {error}"
+            )
+
+    if not documents:
+
+        raise ValueError(
+            "No text could be extracted "
+            "from the provided PDF documents."
+        )
+
+    print()
     print(
-        f"Total PDF pages loaded: "
+        f"Total pages parsed: "
         f"{len(documents)}"
     )
 
@@ -84,16 +214,38 @@ def load_documents():
 
 
 # ============================================================
-# SPLIT DOCUMENTS
+# STEP 3
+# CHUNKING
 # ============================================================
 
-def split_documents(documents):
+def chunk_documents(
+    documents
+):
+
+    print()
+    print("=" * 65)
+    print("STEP 3: DOCUMENT CHUNKING")
+    print("=" * 65)
 
     text_splitter = (
         RecursiveCharacterTextSplitter(
-            chunk_size=800,
-            chunk_overlap=150,
-            length_function=len,
+
+            chunk_size=
+                CHUNK_SIZE,
+
+            chunk_overlap=
+                CHUNK_OVERLAP,
+
+            length_function=
+                len,
+
+            separators=[
+                "\n\n",
+                "\n",
+                ". ",
+                " ",
+                ""
+            ]
         )
     )
 
@@ -101,6 +253,23 @@ def split_documents(documents):
         text_splitter.split_documents(
             documents
         )
+    )
+
+    if not chunks:
+
+        raise ValueError(
+            "Document chunking produced "
+            "zero chunks."
+        )
+
+    print(
+        f"Chunk size: "
+        f"{CHUNK_SIZE}"
+    )
+
+    print(
+        f"Chunk overlap: "
+        f"{CHUNK_OVERLAP}"
     )
 
     print(
@@ -112,82 +281,120 @@ def split_documents(documents):
 
 
 # ============================================================
-# CREATE EMBEDDINGS
+# STEP 4
+# EMBEDDING
 # ============================================================
 
 def create_embeddings():
 
+    print()
+    print("=" * 65)
+    print("STEP 4: SEMANTIC EMBEDDING")
+    print("=" * 65)
+
     print(
-        "Loading embedding model:"
+        "Embedding model:"
     )
 
     print(
         EMBEDDING_MODEL
     )
 
-    embeddings = HuggingFaceEmbeddings(
-        model_name=EMBEDDING_MODEL
+    embeddings = (
+        HuggingFaceEmbeddings(
+            model_name=
+                EMBEDDING_MODEL
+        )
     )
 
     print(
-        "Embedding model loaded successfully."
+        "✓ Embedding model loaded."
     )
 
     return embeddings
 
 
 # ============================================================
-# CREATE FAISS VECTOR STORE
+# STEP 5
+# CREATE VECTOR DATABASE
 # ============================================================
 
-def create_vectorstore(chunks):
+def create_vector_database(
+    chunks
+):
+
+    print()
+    print("=" * 65)
+    print("STEP 5: VECTOR DATABASE")
+    print("=" * 65)
 
     if not chunks:
 
         raise ValueError(
-            "No document chunks available "
-            "to create vector store."
+            "Cannot create vector database "
+            "without document chunks."
         )
 
+    # --------------------------------------------------------
+    # Create embeddings
+    # --------------------------------------------------------
+
+    embeddings = (
+        create_embeddings()
+    )
+
+    print()
     print(
-        "Creating embeddings..."
+        "Creating FAISS vector database..."
     )
 
-    embeddings = create_embeddings()
+    # --------------------------------------------------------
+    # Convert documents into vectors
+    # --------------------------------------------------------
 
-    print(
-        "Creating FAISS vector store..."
+    vectorstore = (
+        FAISS.from_documents(
+            chunks,
+            embeddings
+        )
     )
 
-    vectorstore = FAISS.from_documents(
-        chunks,
-        embeddings
-    )
+    # --------------------------------------------------------
+    # Create vectorstore directory
+    # --------------------------------------------------------
 
-    # Create directory
     VECTORSTORE_PATH.mkdir(
         parents=True,
         exist_ok=True
     )
 
+    # --------------------------------------------------------
     # Save FAISS index
+    # --------------------------------------------------------
+
     vectorstore.save_local(
         str(VECTORSTORE_PATH)
     )
 
+    print()
     print(
-        "FAISS vector store created successfully."
+        "✓ FAISS vector database "
+        "created successfully."
     )
 
     print(
-        f"Saved to: {VECTORSTORE_PATH}"
+        f"Location:"
+    )
+
+    print(
+        VECTORSTORE_PATH
     )
 
     return vectorstore
 
 
 # ============================================================
-# CHECK VECTORSTORE
+# CHECK VECTOR DATABASE
 # ============================================================
 
 def vectorstore_exists():
@@ -204,180 +411,505 @@ def vectorstore_exists():
 
     return (
         index_file.exists()
-        and metadata_file.exists()
+        and
+        metadata_file.exists()
     )
 
 
 # ============================================================
-# LOAD EXISTING VECTOR STORE
+# LOAD VECTOR DATABASE
 # ============================================================
 
 def load_vectorstore():
 
     # --------------------------------------------------------
-    # If vectorstore doesn't exist, build it automatically
+    # Check whether FAISS already exists
     # --------------------------------------------------------
 
     if not vectorstore_exists():
 
+        print()
         print(
-            "FAISS vector store not found."
+            "FAISS vector database "
+            "was not found."
         )
 
         print(
-            "Attempting to build vector store..."
+            "Building knowledge base..."
         )
 
-        documents = load_documents()
+        # Step 1
 
-        if not documents:
+        pdf_files = (
+            collect_knowledge_base()
+        )
 
-            raise FileNotFoundError(
-                "No PDF documents found. "
-                f"Please add PDF files to: "
-                f"{DOCUMENTS_PATH}"
+        # Step 2
+
+        documents = (
+            parse_documents(
+                pdf_files
             )
-
-        chunks = split_documents(
-            documents
         )
 
-        return create_vectorstore(
+        # Step 3
+
+        chunks = (
+            chunk_documents(
+                documents
+            )
+        )
+
+        # Step 4 + Step 5
+
+        return create_vector_database(
             chunks
         )
 
     # --------------------------------------------------------
-    # Load existing vectorstore
+    # Load existing FAISS database
     # --------------------------------------------------------
 
+    print()
     print(
-        "Loading existing FAISS vector store..."
+        "Loading existing FAISS "
+        "vector database..."
     )
 
-    print(
-        f"Vectorstore path: "
-        f"{VECTORSTORE_PATH}"
+    embeddings = (
+        create_embeddings()
     )
 
-    embeddings = create_embeddings()
+    vectorstore = (
+        FAISS.load_local(
 
-    try:
+            str(
+                VECTORSTORE_PATH
+            ),
 
-        vectorstore = FAISS.load_local(
-            str(VECTORSTORE_PATH),
             embeddings,
-            allow_dangerous_deserialization=True
-        )
 
-    except Exception as e:
-
-        raise RuntimeError(
-            "Failed to load FAISS vector store. "
-            f"Error: {e}"
+            allow_dangerous_deserialization=
+                True
         )
+    )
 
     print(
-        "FAISS vector store loaded successfully."
+        "✓ FAISS vector database "
+        "loaded successfully."
     )
 
     return vectorstore
 
 
 # ============================================================
-# RETRIEVE DOCUMENTS
+# STEP 6
+# USER QUERY VALIDATION
 # ============================================================
 
-def retrieve_documents(
-    question,
-    k=4
+def validate_query(
+    question
 ):
 
-    if not question or not question.strip():
+    if question is None:
 
         raise ValueError(
             "Question cannot be empty."
         )
 
-    vectorstore = load_vectorstore()
+    question = (
+        question.strip()
+    )
 
-    documents = (
-        vectorstore.similarity_search(
-            question,
-            k=k
+    if not question:
+
+        raise ValueError(
+            "Question cannot be empty."
+        )
+
+    if len(question) < 2:
+
+        raise ValueError(
+            "Please enter a meaningful "
+            "question."
+        )
+
+    return question
+
+
+# ============================================================
+# STEP 7
+# SEARCH QUERY AGAINST VECTOR DATABASE
+#
+# LANGCHAIN RETRIEVER
+# ============================================================
+
+def retrieve_documents(
+    question,
+    k=DEFAULT_TOP_K
+):
+
+    print()
+    print("=" * 65)
+    print("STEP 7: SEMANTIC RETRIEVAL")
+    print("=" * 65)
+
+    # --------------------------------------------------------
+    # Validate user query
+    # --------------------------------------------------------
+
+    question = validate_query(
+        question
+    )
+
+    # --------------------------------------------------------
+    # Validate Top-K
+    # --------------------------------------------------------
+
+    k = max(
+        1,
+        min(
+            int(k),
+            10
         )
     )
+
+    print(
+        f"Query: {question}"
+    )
+
+    print(
+        f"Top-K: {k}"
+    )
+
+    # --------------------------------------------------------
+    # Load FAISS
+    # --------------------------------------------------------
+
+    vectorstore = (
+        load_vectorstore()
+    )
+
+    # --------------------------------------------------------
+    # Create LangChain Retriever
+    # --------------------------------------------------------
+
+    retriever = (
+        vectorstore.as_retriever(
+
+            search_type=
+                "similarity",
+
+            search_kwargs={
+                "k": k
+            }
+        )
+    )
+
+    # --------------------------------------------------------
+    # Perform semantic search
+    # --------------------------------------------------------
+
+    documents = (
+        retriever.invoke(
+            question
+        )
+    )
+
+    print()
+    print(
+        f"Relevant chunks retrieved: "
+        f"{len(documents)}"
+    )
+
+    # --------------------------------------------------------
+    # Display retrieved sources
+    # --------------------------------------------------------
+
+    for index, document in enumerate(
+        documents,
+        start=1
+    ):
+
+        source = (
+            document.metadata.get(
+                "source",
+                "Unknown"
+            )
+        )
+
+        page = (
+            document.metadata.get(
+                "page",
+                "Unknown"
+            )
+        )
+
+        # PyPDFLoader pages are
+        # zero-indexed
+
+        if isinstance(
+            page,
+            int
+        ):
+
+            page += 1
+
+        print(
+            f"  {index}. "
+            f"{source} | "
+            f"Page {page}"
+        )
 
     return documents
 
 
 # ============================================================
-# BUILD VECTOR DATABASE MANUALLY
+# STEP 8
+# CONTEXT AUGMENTATION
+# ============================================================
+
+def build_context(
+    documents
+):
+
+    print()
+    print("=" * 65)
+    print("STEP 8: CONTEXT AUGMENTATION")
+    print("=" * 65)
+
+    if not documents:
+
+        return ""
+
+    context_parts = []
+
+    for index, document in enumerate(
+        documents,
+        start=1
+    ):
+
+        source = (
+            document.metadata.get(
+                "source",
+                "Unknown"
+            )
+        )
+
+        page = (
+            document.metadata.get(
+                "page",
+                "Unknown"
+            )
+        )
+
+        if isinstance(
+            page,
+            int
+        ):
+
+            page += 1
+
+        context = (
+            f"SOURCE {index}\n"
+            f"DOCUMENT: {source}\n"
+            f"PAGE: {page}\n\n"
+            f"CONTENT:\n"
+            f"{document.page_content}"
+        )
+
+        context_parts.append(
+            context
+        )
+
+    final_context = (
+        "\n\n"
+        .join(
+            context_parts
+        )
+    )
+
+    print(
+        f"Context created from "
+        f"{len(documents)} chunks."
+    )
+
+    print(
+        f"Context characters: "
+        f"{len(final_context)}"
+    )
+
+    return final_context
+
+
+# ============================================================
+# SOURCE INFORMATION
+# ============================================================
+
+def get_sources(
+    documents
+):
+
+    sources = []
+
+    seen = set()
+
+    for document in documents:
+
+        source = (
+            document.metadata.get(
+                "source",
+                "Unknown"
+            )
+        )
+
+        page = (
+            document.metadata.get(
+                "page",
+                "Unknown"
+            )
+        )
+
+        if isinstance(
+            page,
+            int
+        ):
+
+            page += 1
+
+        source_key = (
+            source,
+            page
+        )
+
+        if source_key not in seen:
+
+            seen.add(
+                source_key
+            )
+
+            sources.append(
+                (
+                    source,
+                    page
+                )
+            )
+
+    return sources
+
+
+# ============================================================
+# KNOWLEDGE BASE STATISTICS
+#
+# USED BY app.py
+# ============================================================
+
+def get_document_stats():
+
+    # Make sure documents directory exists
+
+    DOCUMENTS_PATH.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    # Find all PDF documents
+
+    pdf_files = sorted(
+        DOCUMENTS_PATH.glob("*.pdf")
+    )
+
+    # Extract file names
+
+    pdf_names = [
+        pdf_file.name
+        for pdf_file in pdf_files
+    ]
+
+    return (
+        len(pdf_files),
+        pdf_names
+    )
+
+
+# ============================================================
+# BUILD / REBUILD KNOWLEDGE BASE
 # ============================================================
 
 def build_vector_database():
 
     print()
-    print(
-        "========================================"
-    )
-    print(
-        "       Building RAG Vector Database"
-    )
-    print(
-        "========================================"
-    )
-    print()
+    print("=" * 65)
+    print("          BUILDING RAG KNOWLEDGE BASE")
+    print("=" * 65)
 
     # --------------------------------------------------------
-    # Load PDFs
+    # STEP 1
     # --------------------------------------------------------
 
-    documents = load_documents()
-
-    print(
-        f"Documents loaded: "
-        f"{len(documents)}"
+    pdf_files = (
+        collect_knowledge_base()
     )
 
-    if not documents:
+    # --------------------------------------------------------
+    # STEP 2
+    # --------------------------------------------------------
 
-        print()
-        print(
-            "Please put at least one PDF inside:"
+    documents = (
+        parse_documents(
+            pdf_files
         )
-
-        print(
-            DOCUMENTS_PATH
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # Split PDFs
-    # --------------------------------------------------------
-
-    chunks = split_documents(
-        documents
     )
 
     # --------------------------------------------------------
-    # Create vectorstore
+    # STEP 3
     # --------------------------------------------------------
 
-    create_vectorstore(
+    chunks = (
+        chunk_documents(
+            documents
+        )
+    )
+
+    # --------------------------------------------------------
+    # STEP 4 + STEP 5
+    # --------------------------------------------------------
+
+    create_vector_database(
         chunks
     )
 
     print()
+    print("=" * 65)
+    print("          KNOWLEDGE BASE READY")
+    print("=" * 65)
+
+    print()
     print(
-        "========================================"
+        f"PDF Documents : "
+        f"{len(pdf_files)}"
     )
+
     print(
-        "       Vector Database Ready"
+        f"Pages         : "
+        f"{len(documents)}"
     )
+
     print(
-        "========================================"
+        f"Chunks        : "
+        f"{len(chunks)}"
     )
+
+    print(
+        f"Vector DB     : "
+        f"FAISS"
+    )
+
+    print(
+        f"Embeddings    : "
+        f"{EMBEDDING_MODEL}"
+    )
+
     print()
 
 

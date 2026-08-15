@@ -1,455 +1,3442 @@
+# ============================================================
+# DOCUMIND RAG
+# AI-POWERED DOCUMENT QUESTION ANSWERING SYSTEM
+#
+# PROFESSIONAL RAG + PYTHON COMPILER UI
+#
+# RAG:
+#   PDF
+#    ↓
+#   Parsing
+#    ↓
+#   Chunking
+#    ↓
+#   Embeddings
+#    ↓
+#   FAISS
+#    ↓
+#   LangChain Retriever
+#    ↓
+#   Augmentation
+#    ↓
+#   Gemini
+#
+# CODE EXECUTION:
+#   Python Code
+#       ↓
+#   Flask API
+#       ↓
+#   Validation
+#       ↓
+#   Python Interpreter
+#       ↓
+#   Terminal Output
+# ============================================================
+
+
+# ============================================================
+# IMPORTS
+# ============================================================
+
 import os
-import time
+import re
+import ast
+import html
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
-from flask import Flask, request, render_template_string, jsonify
-from dotenv import load_dotenv
-from google import genai
 
-from main import load_vectorstore
+# ============================================================
+# FLASK
+# ============================================================
+
+from flask import (
+    Flask,
+    request,
+    render_template_string,
+    jsonify
+)
+
+
+# ============================================================
+# ENVIRONMENT
+# ============================================================
+
+from dotenv import load_dotenv
+
+
+# ============================================================
+# MARKDOWN
+# ============================================================
+
+import markdown
+
+
+# ============================================================
+# BLEACH
+# ============================================================
+
+import bleach
+
+
+# ============================================================
+# RAG
+# ============================================================
+
+from query import answer_query
+
+from main import (
+    load_vectorstore,
+    get_document_stats
+)
+
+
+# ============================================================
+# LOAD ENVIRONMENT
+# ============================================================
 
 load_dotenv()
 
+
+# ============================================================
+# FLASK APPLICATION
+# ============================================================
+
 app = Flask(__name__)
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-LLM_MODEL = os.getenv("LLM_MODEL", "gemini-3.5-flash")
 
-if not GOOGLE_API_KEY:
-    raise RuntimeError("GOOGLE_API_KEY is not configured.")
+# ============================================================
+# SETTINGS
+# ============================================================
 
-client = genai.Client(api_key=GOOGLE_API_KEY)
+LLM_MODEL = os.getenv(
+    "LLM_MODEL",
+    "gemini-2.5-flash"
+)
 
-# ------------------------------------------------------------
-# HTML / CSS
-# ------------------------------------------------------------
+MAX_CODE_LENGTH = 20000
+
+CODE_TIMEOUT = 5
+
+
+# ============================================================
+# MARKDOWN SETTINGS
+# ============================================================
+
+MARKDOWN_EXTENSIONS = [
+    "fenced_code",
+    "tables",
+    "nl2br",
+    "sane_lists"
+]
+
+
+# ============================================================
+# SAFE HTML TAGS
+# ============================================================
+
+ALLOWED_TAGS = [
+
+    "p",
+    "br",
+
+    "strong",
+    "em",
+
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+
+    "ul",
+    "ol",
+    "li",
+
+    "blockquote",
+    "hr",
+
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+
+    "div",
+    "span",
+
+    "pre",
+    "code",
+
+    "textarea",
+
+    "button"
+
+]
+
+
+# ============================================================
+# SAFE HTML ATTRIBUTES
+# ============================================================
+
+ALLOWED_ATTRIBUTES = {
+
+    "div": [
+        "class",
+        "id"
+    ],
+
+    "span": [
+        "class"
+    ],
+
+    "textarea": [
+        "class",
+        "id",
+        "spellcheck"
+    ],
+
+    "button": [
+        "class",
+        "type"
+    ],
+
+    "code": [
+        "class"
+    ],
+
+    "pre": [
+        "class"
+    ],
+
+    "table": [
+        "class"
+    ]
+
+}
+
+
+# ============================================================
+# SAFE PYTHON MODULES
+#
+# These are standard-library modules useful for
+# educational examples.
+# ============================================================
+
+SAFE_MODULES = {
+
+    "math",
+    "statistics",
+    "random",
+    "datetime",
+    "decimal",
+    "fractions",
+    "itertools",
+    "collections",
+    "string"
+
+}
+
+
+# ============================================================
+# BLOCKED PYTHON OPERATIONS
+#
+# This is NOT a true security sandbox.
+# It is an additional safety layer for local demos.
+# ============================================================
+
+BLOCKED_NAMES = {
+
+    "eval",
+    "exec",
+    "compile",
+    "open",
+    "input",
+
+    "breakpoint",
+
+    "__import__",
+
+    "globals",
+    "locals",
+    "vars",
+
+    "getattr",
+    "setattr",
+    "delattr",
+
+    "help",
+
+    "exit",
+    "quit",
+
+    "os",
+    "sys",
+    "subprocess",
+    "socket",
+    "shutil",
+    "pathlib",
+
+    "importlib",
+
+    "ctypes",
+
+    "pickle",
+    "marshal",
+
+    "builtins"
+
+}
+
+
+# ============================================================
+# RENDER MARKDOWN
+# ============================================================
+
+def render_markdown(
+    text
+):
+
+    if not text:
+
+        return ""
+
+    # --------------------------------------------------------
+    # Detect fenced Python code blocks.
+    #
+    # Example:
+    #
+    # ```python
+    # print("Hello")
+    # ```
+    # --------------------------------------------------------
+
+    code_blocks = []
+
+
+    pattern = re.compile(
+
+        r"```(?:python|py)?\s*\n?"
+        r"(.*?)"
+        r"```",
+
+        re.DOTALL |
+        re.IGNORECASE
+
+    )
+
+
+    def replace_code(
+        match
+    ):
+
+        code = (
+            match.group(1)
+            .strip("\n")
+        )
+
+
+        block_id = (
+            len(code_blocks)
+        )
+
+
+        code_blocks.append(
+            code
+        )
+
+
+        placeholder = (
+            f"\n\n"
+            f"CODEBLOCKPLACEHOLDER"
+            f"{block_id}"
+            f"\n\n"
+        )
+
+
+        return placeholder
+
+
+    processed_text = pattern.sub(
+
+        replace_code,
+
+        text
+
+    )
+
+
+    # --------------------------------------------------------
+    # Markdown → HTML
+    # --------------------------------------------------------
+
+    converted = markdown.markdown(
+
+        processed_text,
+
+        extensions=
+            MARKDOWN_EXTENSIONS
+
+    )
+
+
+    # --------------------------------------------------------
+    # Create compiler blocks
+    # --------------------------------------------------------
+
+    for index, code in enumerate(
+        code_blocks
+    ):
+
+
+        safe_code = html.escape(
+            code
+        )
+
+
+        compiler_block = f"""
+
+        <div class="compiler">
+
+            <div class="compiler-header">
+
+                <div class="compiler-title">
+
+                    <span class="terminal-dot"></span>
+                    <span class="terminal-dot"></span>
+                    <span class="terminal-dot"></span>
+
+                    <span class="language-label">
+                        PYTHON
+                    </span>
+
+                </div>
+
+                <div class="compiler-actions">
+
+                    <button
+                        class="copy-code"
+                        type="button"
+                    >
+                        Copy
+                    </button>
+
+                    <button
+                        class="run-code"
+                        type="button"
+                    >
+                        ▶ Run Code
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <div class="editor">
+
+                <div class="line-numbers"></div>
+
+                <textarea
+                    class="code-editor"
+                    id="code-editor-{index}"
+                    spellcheck="false"
+                >{safe_code}</textarea>
+
+            </div>
+
+
+            <div class="output-panel">
+
+                <div class="output-header">
+
+                    <span>
+                        TERMINAL
+                    </span>
+
+                    <span class="execution-status">
+                        Ready
+                    </span>
+
+                </div>
+
+
+                <pre class="output-content">Click "Run Code" to execute.</pre>
+
+            </div>
+
+        </div>
+
+        """
+
+
+        placeholder = (
+            f"CODEBLOCKPLACEHOLDER"
+            f"{index}"
+        )
+
+
+        converted = converted.replace(
+
+            placeholder,
+
+            compiler_block
+
+        )
+
+
+    # --------------------------------------------------------
+    # Sanitize generated HTML
+    # --------------------------------------------------------
+
+    safe_html = bleach.clean(
+
+        converted,
+
+        tags=
+            ALLOWED_TAGS,
+
+        attributes=
+            ALLOWED_ATTRIBUTES,
+
+        strip=True
+
+    )
+
+
+    return safe_html
+
+
+# ============================================================
+# VALIDATE PYTHON CODE
+# ============================================================
+
+def validate_python_code(
+    code
+):
+
+    # --------------------------------------------------------
+    # Length check
+    # --------------------------------------------------------
+
+    if not code:
+
+        raise ValueError(
+            "No Python code supplied."
+        )
+
+
+    if len(code) > MAX_CODE_LENGTH:
+
+        raise ValueError(
+            "Code is too large."
+        )
+
+
+    # --------------------------------------------------------
+    # Parse syntax
+    # --------------------------------------------------------
+
+    try:
+
+        tree = ast.parse(
+            code
+        )
+
+    except SyntaxError as error:
+
+        raise ValueError(
+            f"Syntax Error: {error}"
+        )
+
+
+    # --------------------------------------------------------
+    # Inspect AST
+    # --------------------------------------------------------
+
+    for node in ast.walk(tree):
+
+
+        # --------------------------------------------
+        # Names
+        # --------------------------------------------
+
+        if isinstance(
+            node,
+            ast.Name
+        ):
+
+            if node.id in BLOCKED_NAMES:
+
+                raise ValueError(
+
+                    f"Operation '{node.id}' "
+                    f"is not allowed."
+
+                )
+
+
+        # --------------------------------------------
+        # Imports
+        # --------------------------------------------
+
+        if isinstance(
+            node,
+            ast.Import
+        ):
+
+            for alias in node.names:
+
+                module = (
+                    alias.name.split(".")[0]
+                )
+
+                if module not in SAFE_MODULES:
+
+                    raise ValueError(
+
+                        f"Import '{module}' "
+                        f"is not allowed."
+
+                    )
+
+
+        # --------------------------------------------
+        # From imports
+        # --------------------------------------------
+
+        if isinstance(
+            node,
+            ast.ImportFrom
+        ):
+
+            if node.module:
+
+                module = (
+                    node.module.split(".")[0]
+                )
+
+                if module not in SAFE_MODULES:
+
+                    raise ValueError(
+
+                        f"Import '{module}' "
+                        f"is not allowed."
+
+                    )
+
+
+        # --------------------------------------------
+        # Dangerous dunder attributes
+        # --------------------------------------------
+
+        if isinstance(
+            node,
+            ast.Attribute
+        ):
+
+            if node.attr.startswith("__"):
+
+                raise ValueError(
+                    "Dunder attribute access "
+                    "is not allowed."
+                )
+
+
+    return True
+
+
+# ============================================================
+# EXECUTE PYTHON CODE
+#
+# LOCAL DEMO / EDUCATIONAL EXECUTOR
+# ============================================================
+
+def execute_python_code(
+    code
+):
+
+    validate_python_code(
+        code
+    )
+
+
+    # --------------------------------------------------------
+    # Create isolated temporary directory
+    # --------------------------------------------------------
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+
+
+        script_path = (
+            Path(temp_dir)
+            / "program.py"
+        )
+
+
+        script_path.write_text(
+
+            code,
+
+            encoding="utf-8"
+
+        )
+
+
+        # ----------------------------------------------------
+        # Restricted environment
+        # ----------------------------------------------------
+
+        environment = {
+
+            "PATH":
+                os.environ.get(
+                    "PATH",
+                    ""
+                ),
+
+            "PYTHONIOENCODING":
+                "utf-8",
+
+            "PYTHONNOUSERSITE":
+                "1"
+
+        }
+
+
+        # ----------------------------------------------------
+        # Execute
+        # ----------------------------------------------------
+
+        try:
+
+            result = subprocess.run(
+
+                [
+
+                    sys.executable,
+
+                    "-I",
+
+                    str(
+                        script_path
+                    )
+
+                ],
+
+                cwd=
+                    temp_dir,
+
+                capture_output=
+                    True,
+
+                text=
+                    True,
+
+                timeout=
+                    CODE_TIMEOUT,
+
+                env=
+                    environment
+
+            )
+
+
+        except subprocess.TimeoutExpired:
+
+            return {
+
+                "success":
+                    False,
+
+                "output":
+                    (
+                        "Execution stopped: "
+                        "time limit exceeded."
+                    )
+
+            }
+
+
+        except Exception as error:
+
+            return {
+
+                "success":
+                    False,
+
+                "output":
+                    str(error)
+
+            }
+
+
+        # ----------------------------------------------------
+        # Combine output
+        # ----------------------------------------------------
+
+        stdout = (
+            result.stdout
+            or ""
+        )
+
+
+        stderr = (
+            result.stderr
+            or ""
+        )
+
+
+        if result.returncode == 0:
+
+            output = stdout
+
+            if not output:
+
+                output = (
+                    "Program finished "
+                    "successfully with "
+                    "no output."
+                )
+
+
+            return {
+
+                "success":
+                    True,
+
+                "output":
+                    output
+
+            }
+
+
+        # ----------------------------------------------------
+        # Error
+        # ----------------------------------------------------
+
+        return {
+
+            "success":
+                False,
+
+            "output":
+                stderr
+                or stdout
+                or
+                "Program exited with an error."
+
+        }
+
+
+# ============================================================
+# HTML
+# ============================================================
 
 HTML = r"""
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DocuMind RAG | AI Document Q&A</title>
-    <style>
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            font-family: Inter, Arial, sans-serif;
-            color: #eef2f8;
-            background:
-                radial-gradient(circle at 0% 0%, rgba(91,112,255,.12), transparent 28%),
-                radial-gradient(circle at 100% 10%, rgba(155,89,255,.10), transparent 28%),
-                #080b12;
-        }
-        .layout { display: flex; min-height: 100vh; }
-        aside {
-            width: 290px; padding: 25px 20px; flex-shrink: 0;
-            background: #070a10;
-            border-right: 1px solid rgba(255,255,255,.07);
-        }
-        main { flex: 1; padding: 34px; max-width: 1500px; margin: auto; width: 100%; }
-        .brand { font-size: 23px; font-weight: 800; }
-        .muted { color: #7f8a9d; font-size: 12px; line-height: 1.6; }
-        .status {
-            padding: 10px 12px; border-radius: 10px; margin: 8px 0;
-            background: rgba(255,255,255,.035);
-            border: 1px solid rgba(255,255,255,.07);
-            font-size: 13px;
-        }
-        .ok { color: #8ff0b0; }
-        .bad { color: #ff9b9b; }
-        .hero {
-            padding: 34px 38px; border-radius: 22px; margin-bottom: 22px;
-            background: linear-gradient(135deg, rgba(255,255,255,.065), rgba(255,255,255,.018));
-            border: 1px solid rgba(255,255,255,.10);
-            box-shadow: 0 24px 70px rgba(0,0,0,.28);
-        }
-        .eyebrow {
-            color: #8fa0ff; font-size: 12px; font-weight: 700;
-            letter-spacing: 1.8px; text-transform: uppercase; margin-bottom: 10px;
-        }
-        h1 { margin: 0 0 14px; font-size: 40px; line-height: 1.1; }
-        h2 { font-size: 19px; margin: 26px 0 10px; }
-        .hero p { color: #aeb8c9; font-size: 15px; line-height: 1.7; max-width: 900px; }
-        .metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
-        .card {
-            padding: 20px; border-radius: 16px;
-            border: 1px solid rgba(255,255,255,.08);
-            background: rgba(255,255,255,.035);
-        }
-        .metric-label {
-            color: #7f8a9d; font-size: 11px; font-weight: 700;
-            letter-spacing: 1px; text-transform: uppercase;
-        }
-        .metric-value { margin-top: 10px; font-size: 20px; font-weight: 700; }
-        textarea {
-            width: 100%; min-height: 120px; resize: vertical;
-            padding: 16px; border-radius: 12px;
-            border: 1px solid #d1d5db; background: white; color: #111827;
-            font: inherit; font-size: 15px;
-        }
-        .controls { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
-        button {
-            border: 0; border-radius: 10px; padding: 12px 20px;
-            cursor: pointer; font-weight: 700; font-size: 14px;
-        }
-        .primary { background: #6f7cff; color: white; }
-        .secondary { background: #242a35; color: #eef2f8; }
-        select, input[type=number] {
-            background: #111722; color: #eef2f8; border: 1px solid #343b49;
-            padding: 10px; border-radius: 9px;
-        }
-        .answer {
-            padding: 26px 28px; border: 1px solid rgba(255,255,255,.10);
-            border-radius: 18px; background: rgba(255,255,255,.035);
-            box-shadow: 0 18px 50px rgba(0,0,0,.18);
-            white-space: pre-wrap; line-height: 1.7;
-        }
-        .source {
-            padding: 16px 18px; border: 1px solid rgba(255,255,255,.08);
-            border-radius: 13px; background: rgba(255,255,255,.025); margin-bottom: 10px;
-        }
-        .source-meta { color: #7f8a9d; font-size: 11px; text-transform: uppercase; letter-spacing: .9px; }
-        .source-name { font-size: 14px; font-weight: 600; margin-top: 5px; }
-        .pill {
-            display: inline-block; padding: 5px 9px; margin: 3px;
-            border: 1px solid rgba(255,255,255,.10); border-radius: 7px;
-            background: rgba(255,255,255,.035); color: #c8d1df; font-size: 11px;
-        }
-        details {
-            margin-top: 14px; padding: 12px 15px; border-radius: 10px;
-            background: rgba(255,255,255,.025);
-            border: 1px solid rgba(255,255,255,.07);
-        }
-        pre { white-space: pre-wrap; overflow-x: auto; color: #cbd3df; }
-        .error {
-            color: #ffb4b4; background: rgba(255,80,80,.08);
-            padding: 13px; border-radius: 10px; margin-top: 12px;
-        }
-        footer { text-align: center; color: #626d7f; font-size: 11px; padding: 35px 0 8px; }
-        @media(max-width: 900px) {
-            .layout { display: block; }
-            aside { width: 100%; }
-            main { padding: 18px; }
-            .metrics { grid-template-columns: repeat(2,1fr); }
-            h1 { font-size: 30px; }
-        }
-    </style>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>
+    DocuMind RAG | AI Document Intelligence
+</title>
+
+
+<style>
+
+/* ============================================================
+   GLOBAL
+============================================================ */
+
+* {
+    box-sizing: border-box;
+}
+
+
+html {
+    scroll-behavior: smooth;
+}
+
+
+body {
+
+    margin: 0;
+
+    min-height: 100vh;
+
+    font-family:
+        Inter,
+        "Segoe UI",
+        Arial,
+        sans-serif;
+
+    background:
+        #080b12;
+
+    color:
+        #e7edf7;
+
+}
+
+
+/* ============================================================
+   LAYOUT
+============================================================ */
+
+.layout {
+
+    display: flex;
+
+    min-height: 100vh;
+
+}
+
+
+/* ============================================================
+   SIDEBAR
+============================================================ */
+
+aside {
+
+    width: 280px;
+
+    flex-shrink: 0;
+
+    padding: 25px 20px;
+
+    background: #070a10;
+
+    border-right:
+        1px solid
+        rgba(255,255,255,.07);
+
+}
+
+
+.brand {
+
+    font-size: 22px;
+
+    font-weight: 800;
+
+}
+
+
+.brand-subtitle {
+
+    margin-top: 5px;
+
+    color: #778397;
+
+    font-size: 12px;
+
+}
+
+
+.sidebar-title {
+
+    margin-top: 25px;
+
+    margin-bottom: 10px;
+
+    font-size: 11px;
+
+    font-weight: 800;
+
+    letter-spacing: 1.2px;
+
+    color: #7d899d;
+
+}
+
+
+.status {
+
+    margin: 7px 0;
+
+    padding: 9px 11px;
+
+    border-radius: 8px;
+
+    background:
+        rgba(255,255,255,.035);
+
+    border:
+        1px solid
+        rgba(255,255,255,.06);
+
+    color: #aeb9ca;
+
+    font-size: 12px;
+
+}
+
+
+.status-ok {
+
+    color: #8ce9aa;
+
+}
+
+
+/* ============================================================
+   MAIN
+============================================================ */
+
+main {
+
+    flex: 1;
+
+    max-width: 1500px;
+
+    width: 100%;
+
+    margin: auto;
+
+    padding: 34px;
+
+}
+
+
+/* ============================================================
+   HERO
+============================================================ */
+
+.hero {
+
+    padding: 34px 38px;
+
+    border-radius: 20px;
+
+    margin-bottom: 22px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(255,255,255,.065),
+            rgba(255,255,255,.015)
+        );
+
+    border:
+        1px solid
+        rgba(255,255,255,.08);
+
+}
+
+
+.eyebrow {
+
+    color: #8e9cff;
+
+    font-size: 11px;
+
+    font-weight: 800;
+
+    letter-spacing: 1.8px;
+
+    text-transform: uppercase;
+
+}
+
+
+h1 {
+
+    margin:
+        8px 0 12px;
+
+    font-size: 39px;
+
+}
+
+
+.hero-description {
+
+    max-width: 900px;
+
+    margin: 0;
+
+    color: #a9b4c5;
+
+    line-height: 1.7;
+
+    font-size: 14px;
+
+}
+
+
+/* ============================================================
+   METRICS
+============================================================ */
+
+.metrics {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(4,1fr);
+
+    gap: 13px;
+
+}
+
+
+.card {
+
+    padding: 19px;
+
+    border-radius: 15px;
+
+    background:
+        rgba(255,255,255,.035);
+
+    border:
+        1px solid
+        rgba(255,255,255,.075);
+
+}
+
+
+.metric-label {
+
+    color: #768296;
+
+    font-size: 10px;
+
+    font-weight: 800;
+
+    letter-spacing: 1px;
+
+}
+
+
+.metric-value {
+
+    margin-top: 8px;
+
+    font-size: 17px;
+
+    font-weight: 700;
+
+}
+
+
+/* ============================================================
+   QUERY
+============================================================ */
+
+.query-card {
+
+    margin-top: 22px;
+
+}
+
+
+.section-title {
+
+    margin:
+        0 0 8px;
+
+    font-size: 18px;
+
+}
+
+
+.section-description {
+
+    color: #758195;
+
+    font-size: 12px;
+
+    line-height: 1.6;
+
+    margin-bottom: 14px;
+
+}
+
+
+textarea {
+
+    width: 100%;
+
+    min-height: 125px;
+
+    padding: 16px;
+
+    resize: vertical;
+
+    border:
+        1px solid
+        #d5d9df;
+
+    border-radius: 10px;
+
+    background: white;
+
+    color: #111827;
+
+    font-family:
+        "Segoe UI",
+        Arial,
+        sans-serif;
+
+    font-size: 15px;
+
+}
+
+
+.controls {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    flex-wrap: wrap;
+
+    margin-top: 12px;
+
+}
+
+
+.controls-label {
+
+    color: #7c8798;
+
+    font-size: 12px;
+
+}
+
+
+input[type="number"] {
+
+    width: 65px;
+
+    padding: 9px;
+
+    border:
+        1px solid
+        #343b49;
+
+    border-radius: 8px;
+
+    background: #111722;
+
+    color: white;
+
+}
+
+
+button {
+
+    border: 0;
+
+    border-radius: 8px;
+
+    padding:
+        10px 17px;
+
+    cursor: pointer;
+
+    font-weight: 700;
+
+}
+
+
+.primary {
+
+    background: #6f7cff;
+
+    color: white;
+
+}
+
+
+.secondary {
+
+    background: #252b36;
+
+    color: #e7edf7;
+
+}
+
+
+/* ============================================================
+   ANSWER
+============================================================ */
+
+.answer-wrapper {
+
+    margin-top: 25px;
+
+}
+
+
+.answer-card {
+
+    overflow: hidden;
+
+    border:
+        1px solid
+        rgba(255,255,255,.09);
+
+    border-radius: 16px;
+
+    background: #0d1119;
+
+}
+
+
+.answer-header {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    padding:
+        12px 17px;
+
+    background: #111722;
+
+    border-bottom:
+        1px solid
+        rgba(255,255,255,.07);
+
+}
+
+
+.answer-title {
+
+    color: #aeb9ca;
+
+    font-size: 11px;
+
+    font-weight: 800;
+
+    letter-spacing: .7px;
+
+}
+
+
+.copy-answer {
+
+    padding: 6px 10px;
+
+    background: #1c2330;
+
+    color: #aeb9ca;
+
+    font-size: 10px;
+
+}
+
+
+/* ============================================================
+   ANSWER CONTENT
+============================================================ */
+
+.answer-content {
+
+    padding: 28px;
+
+    color: #dce4ef;
+
+    line-height: 1.75;
+
+    font-size: 15px;
+
+}
+
+
+.answer-content h1 {
+
+    font-size: 26px;
+
+}
+
+
+.answer-content h2 {
+
+    margin-top: 25px;
+
+    font-size: 20px;
+
+}
+
+
+.answer-content h3 {
+
+    margin-top: 21px;
+
+    font-size: 17px;
+
+}
+
+
+.answer-content strong {
+
+    color: white;
+
+}
+
+
+.answer-content li {
+
+    margin: 6px 0;
+
+}
+
+
+.answer-content blockquote {
+
+    padding:
+        11px 16px;
+
+    border-left:
+        3px solid
+        #6f7cff;
+
+    background:
+        rgba(111,124,255,.07);
+
+}
+
+
+/* ============================================================
+   INLINE CODE
+============================================================ */
+
+.answer-content code {
+
+    padding:
+        2px 6px;
+
+    border-radius: 5px;
+
+    background: #171d28;
+
+    color: #cbd5ff;
+
+    font-family:
+        Consolas,
+        "Courier New",
+        monospace;
+
+    font-size: 13px;
+
+}
+
+
+/* ============================================================
+   COMPILER
+============================================================ */
+
+.compiler {
+
+    margin:
+        20px 0 25px;
+
+    overflow: hidden;
+
+    border:
+        1px solid
+        #293241;
+
+    border-radius: 12px;
+
+    background: #090d13;
+
+    box-shadow:
+        0 12px 35px
+        rgba(0,0,0,.25);
+
+}
+
+
+/* ============================================================
+   COMPILER HEADER
+============================================================ */
+
+.compiler-header {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    padding:
+        9px 12px;
+
+    background: #111722;
+
+    border-bottom:
+        1px solid
+        #293241;
+
+}
+
+
+.compiler-title {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 7px;
+
+}
+
+
+.terminal-dot {
+
+    width: 8px;
+
+    height: 8px;
+
+    border-radius: 50%;
+
+    background: #5d687b;
+
+}
+
+
+.language-label {
+
+    margin-left: 8px;
+
+    color: #8d9aaf;
+
+    font-size: 10px;
+
+    font-weight: 800;
+
+    letter-spacing: 1px;
+
+}
+
+
+.compiler-actions {
+
+    display: flex;
+
+    gap: 7px;
+
+}
+
+
+.compiler-actions button {
+
+    padding:
+        6px 10px;
+
+    border:
+        1px solid
+        #303949;
+
+    border-radius: 6px;
+
+    background: #171e29;
+
+    color: #aeb9ca;
+
+    font-size: 10px;
+
+}
+
+
+.compiler-actions .run-code {
+
+    background: #1d5d3a;
+
+    border-color: #28784a;
+
+    color: #a7f3c5;
+
+}
+
+
+/* ============================================================
+   CODE EDITOR
+============================================================ */
+
+.editor {
+
+    display: flex;
+
+    min-height: 180px;
+
+}
+
+
+.line-numbers {
+
+    width: 48px;
+
+    padding:
+        14px 10px;
+
+    text-align: right;
+
+    user-select: none;
+
+    background: #0c1118;
+
+    color: #4e5a6c;
+
+    font-family:
+        Consolas,
+        monospace;
+
+    font-size: 13px;
+
+    line-height: 1.7;
+
+    white-space: pre;
+
+}
+
+
+.code-editor {
+
+    flex: 1;
+
+    min-height: 180px;
+
+    width: 100%;
+
+    resize: vertical;
+
+    padding:
+        14px;
+
+    border: 0;
+
+    outline: none;
+
+    border-radius: 0;
+
+    background: #090d13;
+
+    color: #d8e2ef;
+
+    font-family:
+        Consolas,
+        "Courier New",
+        monospace;
+
+    font-size: 13px;
+
+    line-height: 1.7;
+
+    tab-size: 4;
+
+}
+
+
+/* ============================================================
+   OUTPUT
+============================================================ */
+
+.output-panel {
+
+    border-top:
+        1px solid
+        #293241;
+
+    background: #080c12;
+
+}
+
+
+.output-header {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    padding:
+        8px 14px;
+
+    color: #68758a;
+
+    font-size: 9px;
+
+    font-weight: 800;
+
+    letter-spacing: 1px;
+
+}
+
+
+.execution-status {
+
+    color: #6f7d91;
+
+}
+
+
+.output-content {
+
+    min-height: 45px;
+
+    margin: 0;
+
+    padding:
+        0 14px 15px;
+
+    color: #cbd5e1;
+
+    font-family:
+        Consolas,
+        "Courier New",
+        monospace;
+
+    font-size: 12px;
+
+    line-height: 1.6;
+
+    white-space: pre-wrap;
+
+}
+
+
+.output-success {
+
+    color: #9ee6b7;
+
+}
+
+
+.output-error {
+
+    color: #ffaaaa;
+
+}
+
+
+/* ============================================================
+   SOURCES
+============================================================ */
+
+.source {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    margin-bottom: 9px;
+
+    padding: 14px 16px;
+
+    border:
+        1px solid
+        rgba(255,255,255,.07);
+
+    border-radius: 10px;
+
+    background:
+        rgba(255,255,255,.025);
+
+}
+
+
+.source-name {
+
+    color: #dce4ef;
+
+    font-size: 13px;
+
+    font-weight: 600;
+
+}
+
+
+.source-page {
+
+    padding:
+        5px 9px;
+
+    border-radius: 6px;
+
+    background: #171e2a;
+
+    color: #9da9bb;
+
+    font-size: 10px;
+
+}
+
+
+/* ============================================================
+   ERROR
+============================================================ */
+
+.error {
+
+    margin-top: 15px;
+
+    padding: 14px;
+
+    border:
+        1px solid
+        rgba(255,80,80,.18);
+
+    border-radius: 10px;
+
+    background:
+        rgba(255,70,70,.07);
+
+    color: #ffb9b9;
+
+    font-size: 13px;
+
+}
+
+
+/* ============================================================
+   FOOTER
+============================================================ */
+
+footer {
+
+    padding:
+        35px 0 10px;
+
+    text-align: center;
+
+    color: #566174;
+
+    font-size: 10px;
+
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media(max-width: 900px) {
+
+    aside {
+
+        width: 225px;
+
+    }
+
+
+    main {
+
+        padding: 20px;
+
+    }
+
+
+    .metrics {
+
+        grid-template-columns:
+            repeat(2,1fr);
+
+    }
+
+}
+
+
+@media(max-width: 700px) {
+
+    .layout {
+
+        display: block;
+
+    }
+
+
+    aside {
+
+        width: 100%;
+
+    }
+
+
+    main {
+
+        padding: 15px;
+
+    }
+
+
+    .metrics {
+
+        grid-template-columns:
+            1fr 1fr;
+
+    }
+
+
+    h1 {
+
+        font-size: 30px;
+
+    }
+
+}
+
+</style>
+
 </head>
+
+
 <body>
+
+
 <div class="layout">
+
+
+<!-- ========================================================
+     SIDEBAR
+========================================================= -->
+
 <aside>
-    <div class="brand">◆ DocuMind RAG</div>
-    <div class="muted" style="margin-top:5px">AI Document Intelligence</div>
 
-    <h3>System</h3>
-    <div class="status ok">
-        ✓ FAISS vector store available
+
+    <div class="brand">
+
+        ◆ DocuMind RAG
+
     </div>
-    <div class="status ok">✓ Gemini API configured</div>
-    <div class="status ok">✓ MiniLM embeddings configured</div>
 
-    {% if vector_error %}
-    <details>
-        <summary>Technical error</summary>
-        <pre>{{ vector_error }}</pre>
-    </details>
-    {% endif %}
 
-    <hr style="border-color:rgba(255,255,255,.07);margin:22px 0">
+    <div class="brand-subtitle">
 
-    <h3>Retrieval Controls</h3>
-    <form method="POST">
-        <label class="muted">Retrieved chunks</label><br>
-        <input type="number" name="top_k" min="2" max="8" value="{{ top_k }}" style="width:80px;margin-top:7px">
-        <div style="margin-top:12px">
-            <label><input type="checkbox" name="show_context" {% if show_context %}checked{% endif %}> Show retrieved context</label>
-        </div>
-        <input type="hidden" name="question" value="{{ question }}">
-        <button class="secondary" style="margin-top:12px" type="submit">Apply</button>
-    </form>
+        AI Document Intelligence
 
-    <hr style="border-color:rgba(255,255,255,.07);margin:22px 0">
+    </div>
 
-    <h3>Architecture</h3>
-    {% for step in ['▣ PDF ingestion','▣ Text chunking','▣ MiniLM embeddings','▣ FAISS similarity search','◆ Gemini AI','✓ Grounded response'] %}
-        <div class="status">{{ step }}</div>
-    {% endfor %}
 
-    <h3>Technology Stack</h3>
-    {% for tech in ['Python','Flask','LangChain','FAISS','Sentence Transformers','Hugging Face','Gemini API'] %}
-        <span class="pill">{{ tech }}</span>
-    {% endfor %}
+    <div class="sidebar-title">
+
+        SYSTEM
+
+    </div>
+
+
+    <div class="status status-ok">
+
+        ✓ LangChain RAG
+
+    </div>
+
+
+    <div class="status status-ok">
+
+        ✓ FAISS Vector Database
+
+    </div>
+
+
+    <div class="status status-ok">
+
+        ✓ MiniLM Embeddings
+
+    </div>
+
+
+    <div class="status status-ok">
+
+        ✓ Gemini LLM
+
+    </div>
+
+
+    <div class="status status-ok">
+
+        ✓ Python Compiler
+
+    </div>
+
+
+    <hr
+        style="
+            border-color:
+            rgba(255,255,255,.07);
+            margin:22px 0
+        "
+    >
+
+
+    <div class="sidebar-title">
+
+        RAG ARCHITECTURE
+
+    </div>
+
+
+    <div class="status">
+        01 · Knowledge Base
+    </div>
+
+    <div class="status">
+        02 · Parsing
+    </div>
+
+    <div class="status">
+        03 · Chunking
+    </div>
+
+    <div class="status">
+        04 · Embedding
+    </div>
+
+    <div class="status">
+        05 · Vector Database
+    </div>
+
+    <div class="status">
+        06 · User Query
+    </div>
+
+    <div class="status">
+        07 · Retrieval
+    </div>
+
+    <div class="status">
+        08 · Augmentation
+    </div>
+
+    <div class="status">
+        09 · Generation
+    </div>
+
+
+    <hr
+        style="
+            border-color:
+            rgba(255,255,255,.07);
+            margin:22px 0
+        "
+    >
+
+
+    <div class="sidebar-title">
+
+        TECHNOLOGY
+
+    </div>
+
+
+    <div class="status">
+        Python
+    </div>
+
+    <div class="status">
+        Flask
+    </div>
+
+    <div class="status">
+        LangChain
+    </div>
+
+    <div class="status">
+        FAISS
+    </div>
+
+    <div class="status">
+        HuggingFace
+    </div>
+
+    <div class="status">
+        Google Gemini
+    </div>
+
+
 </aside>
 
-<main>
-    <div class="hero">
-        <div class="eyebrow">Retrieval-Augmented Generation</div>
-        <h1>◆ AI-Powered Document Q&amp;A</h1>
-        <p>Ask questions about your PDF documents using semantic search, FAISS retrieval, and Gemini AI.</p>
-    </div>
 
-    <div class="metrics">
-        <div class="card"><div class="metric-label">Knowledge Base</div><div class="metric-value">{{ pdf_count }} PDF</div></div>
-        <div class="card"><div class="metric-label">Vector Engine</div><div class="metric-value">FAISS</div></div>
-        <div class="card"><div class="metric-label">Embeddings</div><div class="metric-value">MiniLM-L6-v2</div></div>
-        <div class="card"><div class="metric-label">LLM</div><div class="metric-value">{{ llm_model }}</div></div>
-    </div>
+<!-- ========================================================
+     MAIN
+========================================================= -->
+
+<main>
+
+
+    <section class="hero">
+
+
+        <div class="eyebrow">
+
+            Retrieval-Augmented Generation
+
+        </div>
+
+
+        <h1>
+
+            ◆ AI-Powered Document Q&amp;A
+
+        </h1>
+
+
+        <p class="hero-description">
+
+            Ask questions about your documents using
+            LangChain retrieval, FAISS semantic search,
+            context augmentation, and Google Gemini.
+            Generated Python examples can be edited
+            and executed directly in the built-in
+            compiler.
+
+        </p>
+
+
+    </section>
+
+
+    <!-- ====================================================
+         METRICS
+    ===================================================== -->
+
+    <section class="metrics">
+
+
+        <div class="card">
+
+            <div class="metric-label">
+                Knowledge Base
+            </div>
+
+            <div class="metric-value">
+                {{ pdf_count }} PDF
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="metric-label">
+                Vector Database
+            </div>
+
+            <div class="metric-value">
+                FAISS
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="metric-label">
+                Embeddings
+            </div>
+
+            <div class="metric-value">
+                MiniLM-L6-v2
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="metric-label">
+                LLM
+            </div>
+
+            <div class="metric-value">
+                {{ llm_model }}
+            </div>
+
+        </div>
+
+
+    </section>
+
+
+    <!-- ====================================================
+         KNOWLEDGE BASE
+    ===================================================== -->
 
     {% if pdf_names %}
-    <details>
-        <summary>▣ Knowledge Base Details</summary>
-        <p>Indexed PDF documents:</p>
-        {% for name in pdf_names %}<div>• {{ name }}</div>{% endfor %}
-    </details>
+
+    <section
+        class="card"
+        style="margin-top:22px"
+    >
+
+
+        <h2 class="section-title">
+
+            ▣ Knowledge Base
+
+        </h2>
+
+
+        <div class="section-description">
+
+            Documents indexed by the RAG pipeline.
+
+        </div>
+
+
+        {% for name in pdf_names %}
+
+        <div
+            style="
+                padding:7px 0;
+                color:#cbd5e2;
+                font-size:13px
+            "
+        >
+
+            ▸ {{ name }}
+
+        </div>
+
+        {% endfor %}
+
+
+    </section>
+
     {% endif %}
 
-    <h2>⌕ Ask your document</h2>
-    <div class="muted">Ask a factual, conceptual, or coding question. The system retrieves relevant PDF chunks and sends the context to Gemini.</div>
 
-    <form method="POST" action="/">
-        <textarea name="question" placeholder="Example: What is indentation and why is it important in Python?">{{ question }}</textarea>
-        <div class="controls">
-            <input type="hidden" name="top_k" value="{{ top_k }}">
-            <input type="hidden" name="show_context" value="{{ 'on' if show_context else '' }}">
-            <button class="primary" type="submit">→ Generate Answer</button>
-            <a href="/" style="text-decoration:none"><button class="secondary" type="button">Clear</button></a>
+    <!-- ====================================================
+         QUERY
+    ===================================================== -->
+
+    <section class="card query-card">
+
+
+        <h2 class="section-title">
+
+            ⌕ Ask Your Document
+
+        </h2>
+
+
+        <div class="section-description">
+
+            Ask a question about your indexed documents.
+            Relevant context is retrieved before Gemini
+            generates the answer.
+
         </div>
-    </form>
 
-    {% if warning %}<div class="error">{{ warning }}</div>{% endif %}
-    {% if error %}<div class="error"><strong>{{ error }}</strong><details><pre>{{ error_detail }}</pre></details></div>{% endif %}
+
+        <form
+            method="POST"
+            action="/"
+        >
+
+
+            <textarea
+                name="question"
+                placeholder="Example: What is type casting? Give examples."
+                required
+            >{{ question }}</textarea>
+
+
+            <div class="controls">
+
+
+                <span class="controls-label">
+
+                    Retrieved chunks:
+
+                </span>
+
+
+                <input
+                    type="number"
+                    name="top_k"
+                    min="1"
+                    max="10"
+                    value="{{ top_k }}"
+                >
+
+
+                <button
+                    class="primary"
+                    type="submit"
+                >
+
+                    → Generate Answer
+
+                </button>
+
+
+                <a
+                    href="/"
+                    style="text-decoration:none"
+                >
+
+                    <button
+                        class="secondary"
+                        type="button"
+                    >
+
+                        Clear
+
+                    </button>
+
+                </a>
+
+
+            </div>
+
+
+        </form>
+
+
+    </section>
+
+
+    <!-- ====================================================
+         ERROR
+    ===================================================== -->
+
+    {% if error %}
+
+    <div class="error">
+
+        <strong>
+            RAG Pipeline Error
+        </strong>
+
+        <br><br>
+
+        {{ error }}
+
+    </div>
+
+    {% endif %}
+
+
+    <!-- ====================================================
+         ANSWER
+    ===================================================== -->
 
     {% if answer %}
-    <h2>◆ Generated Answer</h2>
-    <div class="answer">{{ answer }}</div>
 
-    <h2>▣ Response Metrics</h2>
-    <div class="metrics">
-        <div class="card"><div class="metric-label">Retrieved Chunks</div><div class="metric-value">{{ documents|length }}</div></div>
-        <div class="card"><div class="metric-label">Source Pages</div><div class="metric-value">{{ sources|length }}</div></div>
-        <div class="card"><div class="metric-label">Retrieval</div><div class="metric-value">{{ retrieval_time }}s</div></div>
-        <div class="card"><div class="metric-label">Total Response</div><div class="metric-value">{{ total_time }}s</div></div>
-    </div>
 
-    <h2>▣ Retrieved Sources</h2>
-    {% for source, page in sources %}
-    <div class="source">
-        <div class="source-meta">Source</div>
-        <div class="source-name">▣ {{ source }}</div>
-        <div class="source-meta" style="margin-top:9px">Page</div>
-        <div class="source-name">{{ page }}</div>
-    </div>
-    {% endfor %}
+    <section class="answer-wrapper">
 
-    <details>
-        <summary>▣ Retrieval Evidence</summary>
-        {% for document, score in scored_documents %}
-            {% set page = document.metadata.get('page','Unknown') %}
-            {% if page is number %}{% set page = page + 1 %}{% endif %}
-            <p><strong>Rank {{ loop.index }} · Page {{ page }} · FAISS distance: {{ '%.4f'|format(score) }}</strong></p>
-            <div class="muted">{{ document.page_content[:500] }}{% if document.page_content|length > 500 %}...{% endif %}</div>
+
+        <div class="answer-card">
+
+
+            <div class="answer-header">
+
+
+                <div class="answer-title">
+
+                    ● AI GENERATED ANSWER
+
+                </div>
+
+
+                <button
+                    class="copy-answer"
+                    type="button"
+                >
+
+                    Copy Answer
+
+                </button>
+
+
+            </div>
+
+
+            <div
+                id="answer-content"
+                class="answer-content"
+            >
+
+                {{ answer_html | safe }}
+
+            </div>
+
+
+        </div>
+
+
+    </section>
+
+
+    <!-- ====================================================
+         RESPONSE METRICS
+    ===================================================== -->
+
+    <section style="margin-top:25px">
+
+
+        <h2 class="section-title">
+
+            ▣ Response Metrics
+
+        </h2>
+
+
+        <div class="metrics">
+
+
+            <div class="card">
+
+                <div class="metric-label">
+                    Retrieved Chunks
+                </div>
+
+                <div class="metric-value">
+                    {{ documents|length }}
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <div class="metric-label">
+                    Retrieval
+                </div>
+
+                <div class="metric-value">
+                    {{ retrieval_time }}s
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <div class="metric-label">
+                    Generation
+                </div>
+
+                <div class="metric-value">
+                    {{ generation_time }}s
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <div class="metric-label">
+                    Total
+                </div>
+
+                <div class="metric-value">
+                    {{ total_time }}s
+                </div>
+
+            </div>
+
+
+        </div>
+
+
+    </section>
+
+
+    <!-- ====================================================
+         SOURCES
+    ===================================================== -->
+
+    <section style="margin-top:25px">
+
+
+        <h2 class="section-title">
+
+            ▣ Retrieved Sources
+
+        </h2>
+
+
+        <div class="section-description">
+
+            Document chunks used to ground the generated
+            response.
+
+        </div>
+
+
+        {% for source, page in sources %}
+
+
+        <div class="source">
+
+
+            <div class="source-name">
+
+                ▸ {{ source }}
+
+            </div>
+
+
+            <div class="source-page">
+
+                PAGE {{ page }}
+
+            </div>
+
+
+        </div>
+
+
         {% endfor %}
-    </details>
 
-    {% if show_context %}
-    <details open>
-        <summary>▣ Full Retrieved Context</summary>
-        {% for document in documents %}
-            {% set page = document.metadata.get('page','Unknown') %}
-            {% if page is number %}{% set page = page + 1 %}{% endif %}
-            <h4>Chunk {{ loop.index }} · Page {{ page }}</h4>
-            <pre>{{ document.page_content }}</pre>
-        {% endfor %}
-    </details>
-    {% endif %}
+
+    </section>
+
+
     {% endif %}
 
-    <footer>DocuMind RAG · PDF ingestion · embeddings · FAISS retrieval · Gemini generation · Flask</footer>
+
+    <footer>
+
+        DocuMind RAG · LangChain · FAISS · Gemini ·
+        Python Compiler
+
+    </footer>
+
+
 </main>
+
+
 </div>
+
+
+<script>
+
+/* ============================================================
+   UPDATE LINE NUMBERS
+============================================================ */
+
+function updateLineNumbers(editor) {
+
+    const container =
+        editor
+        .closest(".editor")
+        .querySelector(
+            ".line-numbers"
+        );
+
+
+    const lines =
+        editor.value.split("\n").length;
+
+
+    let numbers = "";
+
+
+    for (
+        let i = 1;
+        i <= lines;
+        i++
+    ) {
+
+        numbers += i + "\n";
+
+    }
+
+
+    container.textContent =
+        numbers;
+
+}
+
+
+/* ============================================================
+   INITIALIZE EDITORS
+============================================================ */
+
+document
+    .querySelectorAll(
+        ".code-editor"
+    )
+    .forEach(
+
+        function(editor) {
+
+            updateLineNumbers(
+                editor
+            );
+
+
+            editor.addEventListener(
+                "input",
+                function() {
+
+                    updateLineNumbers(
+                        editor
+                    );
+
+                }
+            );
+
+        }
+
+    );
+
+
+/* ============================================================
+   COPY COMPLETE ANSWER
+============================================================ */
+
+const copyAnswerButton =
+    document.querySelector(
+        ".copy-answer"
+    );
+
+
+if (copyAnswerButton) {
+
+    copyAnswerButton.addEventListener(
+
+        "click",
+
+        async function() {
+
+            const answer =
+                document.getElementById(
+                    "answer-content"
+                );
+
+
+            await navigator
+                .clipboard
+                .writeText(
+                    answer.innerText
+                );
+
+
+            const original =
+                this.innerText;
+
+
+            this.innerText =
+                "Copied ✓";
+
+
+            setTimeout(
+
+                () => {
+
+                    this.innerText =
+                        original;
+
+                },
+
+                1500
+
+            );
+
+        }
+
+    );
+
+}
+
+
+/* ============================================================
+   COPY PYTHON CODE
+============================================================ */
+
+document
+    .querySelectorAll(
+        ".copy-code"
+    )
+    .forEach(
+
+        function(button) {
+
+
+            button.addEventListener(
+
+                "click",
+
+                async function() {
+
+
+                    const compiler =
+                        this.closest(
+                            ".compiler"
+                        );
+
+
+                    const editor =
+                        compiler.querySelector(
+                            ".code-editor"
+                        );
+
+
+                    await navigator
+                        .clipboard
+                        .writeText(
+                            editor.value
+                        );
+
+
+                    const original =
+                        this.innerText;
+
+
+                    this.innerText =
+                        "Copied ✓";
+
+
+                    setTimeout(
+
+                        () => {
+
+                            this.innerText =
+                                original;
+
+                        },
+
+                        1500
+
+                    );
+
+                }
+
+            );
+
+        }
+
+    );
+
+
+/* ============================================================
+   RUN PYTHON CODE
+============================================================ */
+
+document
+    .querySelectorAll(
+        ".run-code"
+    )
+    .forEach(
+
+        function(button) {
+
+
+            button.addEventListener(
+
+                "click",
+
+                async function() {
+
+
+                    const compiler =
+                        this.closest(
+                            ".compiler"
+                        );
+
+
+                    const editor =
+                        compiler.querySelector(
+                            ".code-editor"
+                        );
+
+
+                    const output =
+                        compiler.querySelector(
+                            ".output-content"
+                        );
+
+
+                    const status =
+                        compiler.querySelector(
+                            ".execution-status"
+                        );
+
+
+                    const code =
+                        editor.value;
+
+
+                    if (!code.trim()) {
+
+                        output.textContent =
+                            "No Python code to execute.";
+
+                        output.className =
+                            "output-content output-error";
+
+                        return;
+
+                    }
+
+
+                    /* ----------------------------------------
+                       RUNNING STATE
+                    ---------------------------------------- */
+
+                    button.disabled =
+                        true;
+
+
+                    button.innerText =
+                        "⏳ Running...";
+
+
+                    status.innerText =
+                        "Running";
+
+
+                    status.style.color =
+                        "#f3c969";
+
+
+                    output.className =
+                        "output-content";
+
+
+                    output.textContent =
+                        "Executing Python program...";
+
+
+                    try {
+
+
+                        const response =
+                            await fetch(
+                                "/api/execute",
+                                {
+
+                                    method:
+                                        "POST",
+
+                                    headers: {
+
+                                        "Content-Type":
+                                            "application/json"
+
+                                    },
+
+                                    body:
+                                        JSON.stringify({
+                                            code: code
+                                        })
+
+                                }
+                            );
+
+
+                        const result =
+                            await response.json();
+
+
+                        output.textContent =
+                            result.output
+                            || "No output.";
+
+
+                        if (result.success) {
+
+
+                            output.className =
+                                "output-content output-success";
+
+
+                            status.innerText =
+                                "Completed";
+
+
+                            status.style.color =
+                                "#8ce9aa";
+
+
+                        } else {
+
+
+                            output.className =
+                                "output-content output-error";
+
+
+                            status.innerText =
+                                "Error";
+
+
+                            status.style.color =
+                                "#ffaaaa";
+
+                        }
+
+
+                    } catch (error) {
+
+
+                        output.textContent =
+                            "Connection error: "
+                            + error.message;
+
+
+                        output.className =
+                            "output-content output-error";
+
+
+                        status.innerText =
+                            "Failed";
+
+
+                        status.style.color =
+                            "#ffaaaa";
+
+                    }
+
+
+                    button.disabled =
+                        false;
+
+
+                    button.innerText =
+                        "▶ Run Code";
+
+                }
+
+            );
+
+        }
+
+    );
+
+</script>
+
+
 </body>
+
 </html>
 """
 
-# ------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------
 
-_vectorstore = None
-_vector_error = None
+# ============================================================
+# HOME ROUTE
+# ============================================================
 
-def get_vectorstore():
-    global _vectorstore, _vector_error
-    if _vectorstore is None:
-        try:
-            _vectorstore = load_vectorstore()
-            _vector_error = None
-        except Exception as exc:
-            _vector_error = str(exc)
-            raise
-    return _vectorstore
-
-def get_document_stats():
-    pdf_files = list(Path("documents").glob("*.pdf"))
-    return len(pdf_files), [p.name for p in pdf_files]
-
-def unique_sources(documents):
-    seen = set()
-    results = []
-    for document in documents:
-        source = document.metadata.get("source", "Unknown")
-        page = document.metadata.get("page", "Unknown")
-        if isinstance(page, int):
-            page += 1
-        key = f"{source}|{page}"
-        if key not in seen:
-            seen.add(key)
-            results.append((source, page))
-    return results
-
-def build_context(documents):
-    parts = []
-    for i, document in enumerate(documents, start=1):
-        page = document.metadata.get("page", "Unknown")
-        if isinstance(page, int):
-            page += 1
-        parts.append(
-            f"SOURCE {i}\nPAGE: {page}\n\n{document.page_content}"
-        )
-    return "\n\n".join(parts)
-
-def generate_answer(question, context):
-    prompt = f"""
-You are a professional document question-answering assistant.
-
-Answer the user's question using the retrieved PDF context.
-
-RETRIEVED CONTEXT
-=================
-{context}
-
-USER QUESTION
-=============
-{question}
-
-RULES
-=====
-1. Use the retrieved context whenever it contains relevant information.
-2. If the PDF contains only a question and not its solution, solve it yourself.
-3. Clearly distinguish generated solutions from information explicitly found in the document.
-4. For Python questions, provide complete executable Python code.
-5. Explain important concepts briefly.
-6. Do not invent facts about the PDF.
-7. Give a direct, interview-ready answer.
-"""
-    last_error = None
-    for attempt in range(3):
-        try:
-            response = client.models.generate_content(
-                model=LLM_MODEL,
-                contents=prompt
-            )
-            return response.text
-        except Exception as exc:
-            last_error = str(exc)
-            temporary = any(x in last_error.upper() for x in ["502", "503", "504", "UNAVAILABLE", "INTERNAL"])
-            if temporary and attempt < 2:
-                time.sleep(2 ** attempt)
-                continue
-            raise RuntimeError(last_error)
-    raise RuntimeError(last_error or "Gemini returned no answer.")
-
-# ------------------------------------------------------------
-# Routes
-# ------------------------------------------------------------
-
-@app.route("/", methods=["GET", "POST"])
+@app.route(
+    "/",
+    methods=[
+        "GET",
+        "POST"
+    ]
+)
 def home():
-    pdf_count, pdf_names = get_document_stats()
 
-    question = ""
-    answer = None
-    warning = None
-    error = None
-    error_detail = ""
-    documents = []
-    scored_documents = []
-    sources = []
-    retrieval_time = 0
-    total_time = 0
-    top_k = 4
-    show_context = False
 
-    if request.method == "POST":
-        question = request.form.get("question", "").strip()
+    # ========================================================
+    # KNOWLEDGE BASE
+    # ========================================================
 
-        try:
-            top_k = max(2, min(8, int(request.form.get("top_k", 4))))
-        except ValueError:
-            top_k = 4
-
-        show_context = request.form.get("show_context") == "on"
-
-        if not question:
-            warning = "Please enter a question."
-        else:
-            try:
-                vectorstore = get_vectorstore()
-
-                start = time.perf_counter()
-                scored_documents = vectorstore.similarity_search_with_score(
-                    question, k=top_k
-                )
-                retrieval_time = time.perf_counter() - start
-
-                documents = [doc for doc, _ in scored_documents]
-
-                if not documents:
-                    warning = "No relevant information was found in the PDF."
-                else:
-                    context = build_context(documents)
-
-                    generation_start = time.perf_counter()
-                    answer = generate_answer(question, context)
-                    generation_time = time.perf_counter() - generation_start
-                    total_time = retrieval_time + generation_time
-                    sources = unique_sources(documents)
-
-            except Exception as exc:
-                error = "The RAG pipeline could not complete the request."
-                error_detail = str(exc)
-
-    return render_template_string(
-        HTML,
-        vector_ready=_vectorstore is not None,
-        vector_error=_vector_error,
-        pdf_count=pdf_count,
-        pdf_names=pdf_names,
-        llm_model=LLM_MODEL,
-        question=question,
-        answer=answer,
-        warning=warning,
-        error=error,
-        error_detail=error_detail,
-        documents=documents,
-        scored_documents=scored_documents,
-        sources=sources,
-        retrieval_time=f"{retrieval_time:.2f}",
-        total_time=f"{total_time:.2f}",
-        top_k=top_k,
-        show_context=show_context,
+    pdf_count, pdf_names = (
+        get_document_stats()
     )
 
-@app.route("/health", methods=["GET"])
-def health():
+
+    # ========================================================
+    # DEFAULTS
+    # ========================================================
+
+    question = ""
+
+    answer = None
+
+    answer_html = ""
+
+    documents = []
+
+    sources = []
+
+    error = None
+
+
+    retrieval_time = "0.00"
+
+    generation_time = "0.00"
+
+    total_time = "0.00"
+
+    top_k = 4
+
+
+    # ========================================================
+    # POST
+    # ========================================================
+
+    if request.method == "POST":
+
+
+        question = (
+            request.form
+            .get(
+                "question",
+                ""
+            )
+            .strip()
+        )
+
+
+        try:
+
+            top_k = int(
+
+                request.form
+                .get(
+                    "top_k",
+                    4
+                )
+
+            )
+
+        except ValueError:
+
+            top_k = 4
+
+
+        top_k = max(
+            1,
+            min(
+                top_k,
+                10
+            )
+        )
+
+
+        if not question:
+
+            error = (
+                "Please enter a question."
+            )
+
+
+        else:
+
+
+            try:
+
+
+                # ============================================
+                # LANGCHAIN RAG
+                # ============================================
+
+                result = (
+                    answer_query(
+
+                        question,
+
+                        top_k=
+                            top_k
+
+                    )
+                )
+
+
+                # ============================================
+                # ANSWER
+                # ============================================
+
+                answer = (
+                    result[
+                        "answer"
+                    ]
+                )
+
+
+                # ============================================
+                # RENDER MARKDOWN
+                # ============================================
+
+                answer_html = (
+                    render_markdown(
+                        answer
+                    )
+                )
+
+
+                # ============================================
+                # DOCUMENTS
+                # ============================================
+
+                documents = (
+                    result[
+                        "documents"
+                    ]
+                )
+
+
+                # ============================================
+                # SOURCES
+                # ============================================
+
+                sources = (
+                    result[
+                        "sources"
+                    ]
+                )
+
+
+                # ============================================
+                # PERFORMANCE
+                # ============================================
+
+                retrieval_time = (
+                    f"{result['retrieval_time']:.2f}"
+                )
+
+
+                generation_time = (
+                    f"{result['generation_time']:.2f}"
+                )
+
+
+                total_time = (
+                    f"{result['total_time']:.2f}"
+                )
+
+
+            except Exception as exc:
+
+
+                print(
+                    "\nRAG ERROR:"
+                )
+
+                print(
+                    str(exc)
+                )
+
+
+                error = (
+                    "The RAG pipeline "
+                    "could not complete "
+                    "the request."
+                )
+
+
+    # ========================================================
+    # RENDER
+    # ========================================================
+
+    return render_template_string(
+
+        HTML,
+
+        pdf_count=
+            pdf_count,
+
+        pdf_names=
+            pdf_names,
+
+        question=
+            question,
+
+        answer=
+            answer,
+
+        answer_html=
+            answer_html,
+
+        documents=
+            documents,
+
+        sources=
+            sources,
+
+        error=
+            error,
+
+        retrieval_time=
+            retrieval_time,
+
+        generation_time=
+            generation_time,
+
+        total_time=
+            total_time,
+
+        top_k=
+            top_k,
+
+        llm_model=
+            LLM_MODEL
+
+    )
+
+
+# ============================================================
+# PYTHON COMPILER API
+# ============================================================
+
+@app.route(
+    "/api/execute",
+    methods=[
+        "POST"
+    ]
+)
+def execute_code_api():
+
+
+    # --------------------------------------------------------
+    # JSON
+    # --------------------------------------------------------
+
+    data = (
+        request.get_json(
+            silent=True
+        )
+    )
+
+
+    if not data:
+
+        return jsonify({
+
+            "success":
+                False,
+
+            "output":
+                "Invalid request."
+
+        }), 400
+
+
+    # --------------------------------------------------------
+    # CODE
+    # --------------------------------------------------------
+
+    code = data.get(
+        "code",
+        ""
+    )
+
+
+    if not isinstance(
+        code,
+        str
+    ):
+
+        return jsonify({
+
+            "success":
+                False,
+
+            "output":
+                "Code must be a string."
+
+        }), 400
+
+
+    # --------------------------------------------------------
+    # EXECUTE
+    # --------------------------------------------------------
+
     try:
-        get_vectorstore()
-        return jsonify({"status": "ok", "vectorstore": "loaded"})
+
+
+        result = (
+            execute_python_code(
+                code
+            )
+        )
+
+
+        return jsonify(
+            result
+        )
+
+
+    except ValueError as error:
+
+
+        return jsonify({
+
+            "success":
+                False,
+
+            "output":
+                str(error)
+
+        }), 400
+
+
+    except Exception as error:
+
+
+        print(
+            "EXECUTION ERROR:",
+            error
+        )
+
+
+        return jsonify({
+
+            "success":
+                False,
+
+            "output":
+                "Internal execution error."
+
+        }), 500
+
+
+# ============================================================
+# HEALTH CHECK
+# ============================================================
+
+@app.route(
+    "/health",
+    methods=[
+        "GET"
+    ]
+)
+def health():
+
+
+    try:
+
+
+        load_vectorstore()
+
+
+        return jsonify({
+
+            "status":
+                "ok",
+
+            "application":
+                "DocuMind RAG",
+
+            "framework":
+                "LangChain",
+
+            "web_framework":
+                "Flask",
+
+            "vector_database":
+                "FAISS",
+
+            "embedding_model":
+                "all-MiniLM-L6-v2",
+
+            "llm":
+                LLM_MODEL,
+
+            "compiler":
+                "Python"
+
+        })
+
+
     except Exception as exc:
-        return jsonify({"status": "error", "vectorstore": "unavailable", "error": str(exc)}), 500
+
+
+        return jsonify({
+
+            "status":
+                "error",
+
+            "application":
+                "DocuMind RAG",
+
+            "error":
+                str(exc)
+
+        }), 500
+
+
+# ============================================================
+# APPLICATION ENTRY POINT
+# ============================================================
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "5000"))
-    app.run(host="0.0.0.0", port=port, debug=False)
+
+
+    port = int(
+
+        os.getenv(
+            "PORT",
+            "5000"
+        )
+
+    )
+
+
+    print()
+
+    print(
+        "=" * 65
+    )
+
+    print(
+        "                  DOCUMIND RAG"
+    )
+
+    print(
+        "=" * 65
+    )
+
+    print(
+        "RAG Framework   : LangChain"
+    )
+
+    print(
+        "Web Framework   : Flask"
+    )
+
+    print(
+        "Vector Database : FAISS"
+    )
+
+    print(
+        "Embeddings      : MiniLM-L6-v2"
+    )
+
+    print(
+        f"LLM             : {LLM_MODEL}"
+    )
+
+    print(
+        "Compiler        : Python"
+    )
+
+    print(
+        f"Port            : {port}"
+    )
+
+    print(
+        "=" * 65
+    )
+
+    print()
+
+
+    app.run(
+
+        host=
+            "0.0.0.0",
+
+        port=
+            port,
+
+        debug=
+            False
+
+    )
