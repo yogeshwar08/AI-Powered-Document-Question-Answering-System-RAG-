@@ -1,74 +1,142 @@
-# 🚀 AI-Powered Document Question-Answering System
+# 🚀 DocuMind — AI-Powered Document Question-Answering System
 
-> A professional Retrieval-Augmented Generation (RAG) application that allows users to ask questions across multiple PDF documents and receive context-aware, grounded answers using LangChain, FAISS, Hugging Face embeddings, and Google Gemini.
+> A production-oriented Retrieval-Augmented Generation (RAG) application that enables users to ask questions across multiple PDF documents and receive context-aware, source-grounded answers using **LangChain, FAISS, Gemini Embeddings, and Google Gemini LLMs**.
 
 ---
 
 ## 📌 Project Overview
 
-The **AI-Powered Document Question-Answering System** is an end-to-end RAG application designed to retrieve relevant information from a collection of PDF documents and generate accurate, context-aware responses.
+**DocuMind** is an end-to-end AI document intelligence system designed to retrieve relevant information from multiple PDF documents and generate context-aware answers using a Retrieval-Augmented Generation architecture.
 
-Instead of sending the user's question directly to an LLM, the system first searches the document knowledge base for relevant information.
+Instead of sending a user's question directly to a Large Language Model (LLM), the system first performs semantic retrieval against a document knowledge base.
 
-The retrieved information is then provided as context to the language model, allowing the model to generate an answer grounded in the uploaded documents.
+The retrieved document chunks are then provided to the LLM as contextual information, allowing the system to generate answers grounded in the available documents.
 
-The system supports **multiple PDF documents** and maintains document-level and page-level source information for retrieved content.
+The system also maintains **document-level and page-level source attribution**, making responses more transparent and suitable for technical demonstrations and real-world document intelligence applications.
 
 ---
 
-# 🎯 Project Objective
+# 🎯 Project Objectives
 
-The primary objective of this project is to build a production-oriented document intelligence system that can:
+The system is designed to:
 
 - Process multiple PDF documents
-- Extract and preprocess document content
+- Extract text from PDF files
+- Preprocess document content
 - Split documents into meaningful chunks
-- Convert chunks into semantic embeddings
+- Generate semantic embeddings
 - Store embeddings in a FAISS vector database
 - Perform semantic similarity search
-- Retrieve relevant document context
-- Augment the user query with retrieved context
-- Generate grounded answers using Google Gemini
-- Display document and page-level sources
+- Retrieve the most relevant document chunks
+- Build contextual prompts dynamically
+- Generate grounded responses using Google Gemini
+- Provide document and page-level source attribution
+- Expose the RAG pipeline through a Flask REST API
 - Provide an interactive web interface
-- Display Python examples in an interactive compiler-style interface
+- Display executable Python examples in a compiler-style interface
+- Provide response-time and retrieval metrics
+- Support cloud deployment using Gunicorn
 
 ---
 
-# 🧠 What is RAG?
+# 🧠 What is Retrieval-Augmented Generation?
 
 **Retrieval-Augmented Generation (RAG)** combines information retrieval with Large Language Models.
 
-Instead of relying only on the knowledge stored inside an LLM, RAG retrieves relevant information from an external knowledge base and provides that information to the LLM as context.
+Instead of relying entirely on the knowledge stored inside an LLM, RAG retrieves relevant information from an external knowledge base and supplies that information to the LLM as context.
 
-### Traditional LLM
+This helps the application produce responses that are more relevant to the provided documents.
+
+---
+
+## Traditional LLM Architecture
 
 ```text
 User Question
-      ↓
-     LLM
-      ↓
+      │
+      ▼
+   LLM
+      │
+      ▼
    Answer
-
-
-
-### RAG Architecture
-
-```text
-User Question
-      ↓
-Query Embedding
-      ↓
-Vector Similarity Search
-      ↓
-FAISS Vector Database
-      ↓
-Relevant Document Chunks
-      ↓
-Context Augmentation
-      ↓
-Google Gemini
-      ↓
-Grounded Answer
-
-Built a production-oriented multi-document RAG system using LangChain, FAISS, Hugging Face sentence-transformer embeddings, and Google Gemini. Implemented document parsing, recursive chunking, semantic retrieval, context augmentation, source attribution, and LLM-based answer generation through LangChain's LCEL pipeline.
+####RAG Architecture
+                    DOCUMENT INGESTION
+                        │
+                        ▼
+                 Multiple PDFs
+                        │
+                        ▼
+                PDF Text Extraction
+                        │
+                        ▼
+                 Document Chunking
+                        │
+                        ▼
+                Gemini Embeddings
+                        │
+                        ▼
+                  FAISS Index
+                        │
+                        │
+                        ▼
+USER QUESTION ─────► Semantic Retrieval
+                        │
+                        ▼
+                 Relevant Chunks
+                        │
+                        ▼
+               Context Augmentation
+                        │
+                        ▼
+                 Google Gemini
+                        │
+                        ▼
+                Grounded Answer
+                        │
+                        ▼
+             Sources + Page Numbers
+####System Architecture 
+┌─────────────────────────────────────────────────────────────┐
+│                       USER INTERFACE                        │
+│                  HTML / CSS / JavaScript                    │
+└────────────────────────────┬────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      FLASK REST API                         │
+│                                                             │
+│  GET  /                                                     │
+│  GET  /health                                               │
+│  GET  /ready                                                │
+│  GET  /api/stats                                            │
+│  GET  /api/info                                             │
+│  POST /api/ask                                              │
+└────────────────────────────┬────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     LANGCHAIN RAG LAYER                     │
+│                                                             │
+│  Query → Retriever → Context → Prompt → LLM                 │
+└────────────────────────────┬────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    FAISS VECTOR DATABASE                    │
+│                                                             │
+│              Semantic Similarity Retrieval                  │
+└────────────────────────────┬────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 GOOGLE GEMINI EMBEDDINGS                    │
+│                                                             │
+│                 gemini-embedding-2                          │
+└────────────────────────────┬────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     GOOGLE GEMINI LLM                       │
+│                                                             │
+│                    Answer Generation                        │
+└─────────────────────────────────────────────────────────────┘
