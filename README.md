@@ -70,3 +70,5 @@ Context Augmentation
 Google Gemini
       ↓
 Grounded Answer
+
+Built a production-oriented multi-document RAG system using LangChain, FAISS, Hugging Face sentence-transformer embeddings, and Google Gemini. Implemented document parsing, recursive chunking, semantic retrieval, context augmentation, source attribution, and LLM-based answer generation through LangChain's LCEL pipeline.

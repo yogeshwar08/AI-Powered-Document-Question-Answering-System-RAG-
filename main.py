@@ -2,7 +2,7 @@
 # DOCUMIND RAG
 # AI-POWERED DOCUMENT QUESTION ANSWERING SYSTEM
 #
-# RAG PIPELINE
+# PROFESSIONAL MULTI-DOCUMENT RAG PIPELINE
 #
 # 1. COLLECTION OF KNOWLEDGE BASE
 # 2. PARSING AND PREPROCESSING
@@ -10,30 +10,50 @@
 # 4. EMBEDDING
 # 5. VECTOR DATABASE
 # 6. USER QUERY
-# 7. SEARCH QUERY AGAINST VECTOR DATABASE
-# 8. AUGMENTATION
-# 9. GENERATE ANSWER
+# 7. SEMANTIC RETRIEVAL
+# 8. CONTEXT AUGMENTATION
+# 9. ANSWER GENERATION
 # ============================================================
 
 
+# ============================================================
+# STANDARD LIBRARY
+# ============================================================
+
+from functools import lru_cache
 from pathlib import Path
 
 
 # ============================================================
-# LANGCHAIN IMPORTS
+# LANGCHAIN - DOCUMENT LOADING
 # ============================================================
 
 from langchain_community.document_loaders import (
     PyPDFLoader
 )
 
+
+# ============================================================
+# LANGCHAIN - TEXT SPLITTING
+# ============================================================
+
 from langchain_text_splitters import (
     RecursiveCharacterTextSplitter
 )
 
+
+# ============================================================
+# LANGCHAIN - EMBEDDINGS
+# ============================================================
+
 from langchain_huggingface import (
     HuggingFaceEmbeddings
 )
+
+
+# ============================================================
+# LANGCHAIN - VECTOR DATABASE
+# ============================================================
 
 from langchain_community.vectorstores import (
     FAISS
@@ -44,9 +64,11 @@ from langchain_community.vectorstores import (
 # BASE DIRECTORY
 # ============================================================
 
-BASE_DIR = Path(
-    __file__
-).resolve().parent
+BASE_DIR = (
+    Path(__file__)
+    .resolve()
+    .parent
+)
 
 
 # ============================================================
@@ -56,6 +78,7 @@ BASE_DIR = Path(
 DOCUMENTS_PATH = (
     BASE_DIR / "documents"
 )
+
 
 VECTORSTORE_PATH = (
     BASE_DIR / "vectorstore"
@@ -86,6 +109,8 @@ CHUNK_OVERLAP = 150
 
 DEFAULT_TOP_K = 4
 
+MAX_TOP_K = 10
+
 
 # ============================================================
 # STEP 1
@@ -99,15 +124,18 @@ def collect_knowledge_base():
     print("STEP 1: COLLECTION OF KNOWLEDGE BASE")
     print("=" * 65)
 
-    # Create documents directory
-    # if it does not exist
+    # --------------------------------------------------------
+    # Ensure documents directory exists
+    # --------------------------------------------------------
 
     DOCUMENTS_PATH.mkdir(
         parents=True,
         exist_ok=True
     )
 
-    # Find PDF documents
+    # --------------------------------------------------------
+    # Find all PDF documents
+    # --------------------------------------------------------
 
     pdf_files = sorted(
         DOCUMENTS_PATH.glob("*.pdf")
@@ -116,10 +144,11 @@ def collect_knowledge_base():
     if not pdf_files:
 
         raise FileNotFoundError(
-            f"No PDF documents found in:\n"
+            "\nNo PDF documents found.\n\n"
+            f"Expected location:\n"
             f"{DOCUMENTS_PATH}\n\n"
-            f"Please place your PDF files inside "
-            f"the 'documents' folder."
+            "Place your PDF files inside "
+            "the documents folder."
         )
 
     print(
@@ -169,7 +198,9 @@ def parse_documents(
                 loader.load()
             )
 
-            # Add source metadata
+            # ------------------------------------------------
+            # Preserve document-level metadata
+            # ------------------------------------------------
 
             for document in pdf_documents:
 
@@ -189,7 +220,7 @@ def parse_documents(
         except Exception as error:
 
             print(
-                f"  ✗ Failed to parse "
+                f"  ✗ Failed to parse: "
                 f"{pdf_file.name}"
             )
 
@@ -200,8 +231,8 @@ def parse_documents(
     if not documents:
 
         raise ValueError(
-            "No text could be extracted "
-            "from the provided PDF documents."
+            "No readable text could be "
+            "extracted from the PDF files."
         )
 
     print()
@@ -215,7 +246,7 @@ def parse_documents(
 
 # ============================================================
 # STEP 3
-# CHUNKING
+# DOCUMENT CHUNKING
 # ============================================================
 
 def chunk_documents(
@@ -226,6 +257,10 @@ def chunk_documents(
     print("=" * 65)
     print("STEP 3: DOCUMENT CHUNKING")
     print("=" * 65)
+
+    # --------------------------------------------------------
+    # LangChain Recursive Character Splitter
+    # --------------------------------------------------------
 
     text_splitter = (
         RecursiveCharacterTextSplitter(
@@ -246,6 +281,7 @@ def chunk_documents(
                 " ",
                 ""
             ]
+
         )
     )
 
@@ -263,17 +299,17 @@ def chunk_documents(
         )
 
     print(
-        f"Chunk size: "
+        f"Chunk size    : "
         f"{CHUNK_SIZE}"
     )
 
     print(
-        f"Chunk overlap: "
+        f"Chunk overlap : "
         f"{CHUNK_OVERLAP}"
     )
 
     print(
-        f"Total chunks created: "
+        f"Total chunks  : "
         f"{len(chunks)}"
     )
 
@@ -282,9 +318,16 @@ def chunk_documents(
 
 # ============================================================
 # STEP 4
-# EMBEDDING
+# SEMANTIC EMBEDDINGS
+#
+# IMPORTANT:
+# lru_cache ensures the embedding model is loaded
+# only once per Python process.
 # ============================================================
 
+@lru_cache(
+    maxsize=1
+)
 def create_embeddings():
 
     print()
@@ -300,10 +343,27 @@ def create_embeddings():
         EMBEDDING_MODEL
     )
 
+    # --------------------------------------------------------
+    # CPU explicitly selected
+    #
+    # This is important for Render because GPU is not
+    # available on the normal deployment environment.
+    # --------------------------------------------------------
+
     embeddings = (
         HuggingFaceEmbeddings(
+
             model_name=
-                EMBEDDING_MODEL
+                EMBEDDING_MODEL,
+
+            model_kwargs={
+                "device": "cpu"
+            },
+
+            encode_kwargs={
+                "normalize_embeddings": True
+            }
+
         )
     )
 
@@ -316,7 +376,7 @@ def create_embeddings():
 
 # ============================================================
 # STEP 5
-# CREATE VECTOR DATABASE
+# CREATE FAISS VECTOR DATABASE
 # ============================================================
 
 def create_vector_database(
@@ -336,7 +396,7 @@ def create_vector_database(
         )
 
     # --------------------------------------------------------
-    # Create embeddings
+    # Get cached embedding model
     # --------------------------------------------------------
 
     embeddings = (
@@ -349,7 +409,7 @@ def create_vector_database(
     )
 
     # --------------------------------------------------------
-    # Convert documents into vectors
+    # Convert document chunks into vectors
     # --------------------------------------------------------
 
     vectorstore = (
@@ -360,7 +420,7 @@ def create_vector_database(
     )
 
     # --------------------------------------------------------
-    # Create vectorstore directory
+    # Ensure vectorstore directory exists
     # --------------------------------------------------------
 
     VECTORSTORE_PATH.mkdir(
@@ -369,11 +429,13 @@ def create_vector_database(
     )
 
     # --------------------------------------------------------
-    # Save FAISS index
+    # Save FAISS database
     # --------------------------------------------------------
 
     vectorstore.save_local(
-        str(VECTORSTORE_PATH)
+        str(
+            VECTORSTORE_PATH
+        )
     )
 
     print()
@@ -383,11 +445,8 @@ def create_vector_database(
     )
 
     print(
-        f"Location:"
-    )
-
-    print(
-        VECTORSTORE_PATH
+        f"Location: "
+        f"{VECTORSTORE_PATH}"
     )
 
     return vectorstore
@@ -399,7 +458,7 @@ def create_vector_database(
 
 def vectorstore_exists():
 
-    index_file = (
+    faiss_file = (
         VECTORSTORE_PATH /
         "index.faiss"
     )
@@ -410,93 +469,125 @@ def vectorstore_exists():
     )
 
     return (
-        index_file.exists()
+        faiss_file.exists()
         and
         metadata_file.exists()
     )
 
 
 # ============================================================
-# LOAD VECTOR DATABASE
+# LOAD FAISS VECTOR DATABASE
+#
+# IMPORTANT:
+# This function is cached.
+#
+# The embedding model and FAISS database are therefore
+# initialized only once per Gunicorn worker.
+#
+# It is NOT executed when app.py merely imports main.py.
 # ============================================================
 
+@lru_cache(
+    maxsize=1
+)
 def load_vectorstore():
 
-    # --------------------------------------------------------
-    # Check whether FAISS already exists
-    # --------------------------------------------------------
-
-    if not vectorstore_exists():
-
-        print()
-        print(
-            "FAISS vector database "
-            "was not found."
-        )
-
-        print(
-            "Building knowledge base..."
-        )
-
-        # Step 1
-
-        pdf_files = (
-            collect_knowledge_base()
-        )
-
-        # Step 2
-
-        documents = (
-            parse_documents(
-                pdf_files
-            )
-        )
-
-        # Step 3
-
-        chunks = (
-            chunk_documents(
-                documents
-            )
-        )
-
-        # Step 4 + Step 5
-
-        return create_vector_database(
-            chunks
-        )
-
-    # --------------------------------------------------------
-    # Load existing FAISS database
-    # --------------------------------------------------------
-
     print()
+    print("=" * 65)
+    print("LOADING RAG VECTOR DATABASE")
+    print("=" * 65)
+
+    # ========================================================
+    # EXISTING VECTOR DATABASE
+    # ========================================================
+
+    if vectorstore_exists():
+
+        print(
+            "Existing FAISS database found."
+        )
+
+        print(
+            "Loading vector database..."
+        )
+
+        embeddings = (
+            create_embeddings()
+        )
+
+        vectorstore = (
+            FAISS.load_local(
+
+                str(
+                    VECTORSTORE_PATH
+                ),
+
+                embeddings,
+
+                allow_dangerous_deserialization=
+                    True
+
+            )
+        )
+
+        print(
+            "✓ FAISS vector database "
+            "loaded successfully."
+        )
+
+        return vectorstore
+
+
+    # ========================================================
+    # VECTOR DATABASE DOES NOT EXIST
+    #
+    # Build it automatically.
+    # ========================================================
+
     print(
-        "Loading existing FAISS "
-        "vector database..."
+        "FAISS database not found."
     )
 
-    embeddings = (
-        create_embeddings()
+    print(
+        "Building knowledge base..."
     )
+
+    # --------------------------------------------------------
+    # STEP 1
+    # --------------------------------------------------------
+
+    pdf_files = (
+        collect_knowledge_base()
+    )
+
+    # --------------------------------------------------------
+    # STEP 2
+    # --------------------------------------------------------
+
+    documents = (
+        parse_documents(
+            pdf_files
+        )
+    )
+
+    # --------------------------------------------------------
+    # STEP 3
+    # --------------------------------------------------------
+
+    chunks = (
+        chunk_documents(
+            documents
+        )
+    )
+
+    # --------------------------------------------------------
+    # STEP 4 + STEP 5
+    # --------------------------------------------------------
 
     vectorstore = (
-        FAISS.load_local(
-
-            str(
-                VECTORSTORE_PATH
-            ),
-
-            embeddings,
-
-            allow_dangerous_deserialization=
-                True
+        create_vector_database(
+            chunks
         )
-    )
-
-    print(
-        "✓ FAISS vector database "
-        "loaded successfully."
     )
 
     return vectorstore
@@ -517,6 +608,15 @@ def validate_query(
             "Question cannot be empty."
         )
 
+    if not isinstance(
+        question,
+        str
+    ):
+
+        raise ValueError(
+            "Question must be text."
+        )
+
     question = (
         question.strip()
     )
@@ -534,12 +634,23 @@ def validate_query(
             "question."
         )
 
+    # --------------------------------------------------------
+    # Prevent unnecessarily huge queries
+    # --------------------------------------------------------
+
+    if len(question) > 5000:
+
+        raise ValueError(
+            "Question is too long. "
+            "Please keep it below 5000 characters."
+        )
+
     return question
 
 
 # ============================================================
 # STEP 7
-# SEARCH QUERY AGAINST VECTOR DATABASE
+# SEMANTIC RETRIEVAL
 #
 # LANGCHAIN RETRIEVER
 # ============================================================
@@ -555,35 +666,48 @@ def retrieve_documents(
     print("=" * 65)
 
     # --------------------------------------------------------
-    # Validate user query
+    # Validate query
     # --------------------------------------------------------
 
-    question = validate_query(
-        question
+    question = (
+        validate_query(
+            question
+        )
     )
 
     # --------------------------------------------------------
     # Validate Top-K
     # --------------------------------------------------------
 
+    try:
+
+        k = int(k)
+
+    except (
+        TypeError,
+        ValueError
+    ):
+
+        k = DEFAULT_TOP_K
+
     k = max(
         1,
         min(
-            int(k),
-            10
+            k,
+            MAX_TOP_K
         )
     )
 
     print(
-        f"Query: {question}"
+        f"Query  : {question}"
     )
 
     print(
-        f"Top-K: {k}"
+        f"Top-K  : {k}"
     )
 
     # --------------------------------------------------------
-    # Load FAISS
+    # Load cached FAISS
     # --------------------------------------------------------
 
     vectorstore = (
@@ -591,7 +715,7 @@ def retrieve_documents(
     )
 
     # --------------------------------------------------------
-    # Create LangChain Retriever
+    # LangChain Retriever
     # --------------------------------------------------------
 
     retriever = (
@@ -603,11 +727,12 @@ def retrieve_documents(
             search_kwargs={
                 "k": k
             }
+
         )
     )
 
     # --------------------------------------------------------
-    # Perform semantic search
+    # Semantic search
     # --------------------------------------------------------
 
     documents = (
@@ -617,13 +742,14 @@ def retrieve_documents(
     )
 
     print()
+
     print(
         f"Relevant chunks retrieved: "
         f"{len(documents)}"
     )
 
     # --------------------------------------------------------
-    # Display retrieved sources
+    # Display source information
     # --------------------------------------------------------
 
     for index, document in enumerate(
@@ -645,9 +771,7 @@ def retrieve_documents(
             )
         )
 
-        # PyPDFLoader pages are
-        # zero-indexed
-
+        # PyPDFLoader uses zero-based pages
         if isinstance(
             page,
             int
@@ -710,16 +834,23 @@ def build_context(
 
             page += 1
 
-        context = (
+        content = (
+            document.page_content
+            or ""
+        )
+
+        context_block = (
+
             f"SOURCE {index}\n"
             f"DOCUMENT: {source}\n"
             f"PAGE: {page}\n\n"
             f"CONTENT:\n"
-            f"{document.page_content}"
+            f"{content}"
+
         )
 
         context_parts.append(
-            context
+            context_block
         )
 
     final_context = (
@@ -802,24 +933,23 @@ def get_sources(
 # KNOWLEDGE BASE STATISTICS
 #
 # USED BY app.py
+#
+# IMPORTANT:
+# This does NOT load FAISS.
+# This does NOT load HuggingFace.
+# This keeps Flask startup lightweight.
 # ============================================================
 
 def get_document_stats():
-
-    # Make sure documents directory exists
 
     DOCUMENTS_PATH.mkdir(
         parents=True,
         exist_ok=True
     )
 
-    # Find all PDF documents
-
     pdf_files = sorted(
         DOCUMENTS_PATH.glob("*.pdf")
     )
-
-    # Extract file names
 
     pdf_names = [
         pdf_file.name
@@ -834,13 +964,18 @@ def get_document_stats():
 
 # ============================================================
 # BUILD / REBUILD KNOWLEDGE BASE
+#
+# This is used when you explicitly run:
+#
+#     python main.py
+#
 # ============================================================
 
 def build_vector_database():
 
     print()
     print("=" * 65)
-    print("          BUILDING RAG KNOWLEDGE BASE")
+    print("       BUILDING RAG KNOWLEDGE BASE")
     print("=" * 65)
 
     # --------------------------------------------------------
@@ -879,12 +1014,24 @@ def build_vector_database():
         chunks
     )
 
+    # --------------------------------------------------------
+    # Clear cached objects
+    #
+    # This matters if build_vector_database() is called
+    # more than once during the same Python process.
+    # --------------------------------------------------------
+
+    load_vectorstore.cache_clear()
+
+    create_embeddings.cache_clear()
+
     print()
     print("=" * 65)
     print("          KNOWLEDGE BASE READY")
     print("=" * 65)
 
     print()
+
     print(
         f"PDF Documents : "
         f"{len(pdf_files)}"
@@ -901,8 +1048,7 @@ def build_vector_database():
     )
 
     print(
-        f"Vector DB     : "
-        f"FAISS"
+        "Vector DB     : FAISS"
     )
 
     print(
@@ -913,9 +1059,6 @@ def build_vector_database():
     print()
 
 
-# ============================================================
-# MAIN
-# ============================================================
 
 if __name__ == "__main__":
 
