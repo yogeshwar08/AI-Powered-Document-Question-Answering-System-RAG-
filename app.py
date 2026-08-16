@@ -3,17 +3,19 @@
 # AI-POWERED DOCUMENT QUESTION ANSWERING SYSTEM
 #
 # FLASK APPLICATION
+# PRODUCTION-READY RAG WEB API
 #
-# RAG PIPELINE
-# 1. KNOWLEDGE BASE
-# 2. PARSING
-# 3. CHUNKING
-# 4. EMBEDDING
-# 5. FAISS VECTOR DATABASE
-# 6. USER QUERY
-# 7. RETRIEVAL
-# 8. AUGMENTATION
-# 9. ANSWER GENERATION
+# Features:
+#   - Flask web application
+#   - PDF document serving
+#   - Multi-document knowledge base
+#   - FAISS vector retrieval
+#   - LangChain RAG pipeline
+#   - Google Gemini
+#   - Health monitoring
+#   - API statistics
+#   - Structured error handling
+#   - Gunicorn / RunXBuild compatible
 # ============================================================
 
 
@@ -24,6 +26,7 @@
 import os
 import time
 import traceback
+
 from pathlib import Path
 
 
@@ -45,6 +48,7 @@ from flask import (
     jsonify,
     render_template,
     request,
+    send_from_directory,
 )
 
 
@@ -71,13 +75,31 @@ app = Flask(
 
 
 # ============================================================
-# BASE DIRECTORY
+# BASE DIRECTORIES
 # ============================================================
 
 BASE_DIR = (
     Path(__file__)
     .resolve()
     .parent
+)
+
+
+DOCUMENTS_DIR = (
+    BASE_DIR /
+    "documents"
+)
+
+
+VECTORSTORE_DIR = (
+    BASE_DIR /
+    "vectorstore"
+)
+
+
+TEMPLATES_DIR = (
+    BASE_DIR /
+    "templates"
 )
 
 
@@ -100,6 +122,61 @@ LLM_MODEL = os.getenv(
 )
 
 
+EMBEDDING_MODEL = os.getenv(
+    "EMBEDDING_MODEL",
+    "gemini-embedding-2"
+)
+
+
+# ============================================================
+# APPLICATION INFORMATION
+# ============================================================
+
+APP_NAME = (
+    "DocuMind"
+)
+
+
+APP_VERSION = (
+    "1.0.0"
+)
+
+
+# ============================================================
+# STARTUP INFORMATION
+# ============================================================
+
+print()
+print("=" * 70)
+print("DOCUMIND")
+print("AI-POWERED DOCUMENT QUESTION ANSWERING SYSTEM")
+print("=" * 70)
+
+print(
+    f"Base Directory : {BASE_DIR}"
+)
+
+print(
+    f"Documents      : {DOCUMENTS_DIR}"
+)
+
+print(
+    f"Vectorstore    : {VECTORSTORE_DIR}"
+)
+
+print(
+    f"LLM            : {LLM_MODEL}"
+)
+
+print(
+    f"Embeddings     : {EMBEDDING_MODEL}"
+)
+
+print(
+    "=" * 70
+)
+
+
 # ============================================================
 # STEP 1
 # HOME PAGE
@@ -117,13 +194,105 @@ def home():
 
 
 # ============================================================
+# STEP 2
+# PDF DOCUMENT VIEWER
+#
+# This route allows the frontend to open:
+#
+# /documents/Python_Interview_Questions.pdf
+#
+# The browser will display the PDF directly.
+# ============================================================
+
+@app.route(
+    "/documents/<path:filename>",
+    methods=["GET"]
+)
+def serve_document(
+    filename
+):
+
+    try:
+
+        # ----------------------------------------------------
+        # SECURITY
+        # ----------------------------------------------------
+        #
+        # send_from_directory prevents users from accessing
+        # arbitrary files outside the documents directory.
+        # ----------------------------------------------------
+
+        requested_file = (
+            DOCUMENTS_DIR /
+            filename
+        )
+
+        if not requested_file.is_file():
+
+            return jsonify({
+
+                "success":
+                    False,
+
+                "error":
+                    "Document not found."
+
+            }), 404
+
+
+        # ----------------------------------------------------
+        # SERVE PDF
+        # ----------------------------------------------------
+
+        return send_from_directory(
+
+            DOCUMENTS_DIR,
+
+            filename,
+
+            mimetype="application/pdf",
+
+            as_attachment=False,
+
+            max_age=3600
+
+        )
+
+
+    except Exception as error:
+
+        print()
+        print(
+            "Document serving error:"
+        )
+
+        print(
+            error
+        )
+
+        traceback.print_exc()
+
+
+        return jsonify({
+
+            "success":
+                False,
+
+            "error":
+                "Unable to open document."
+
+        }), 500
+
+
+# ============================================================
 # HEALTH CHECK
 #
 # IMPORTANT:
-# DO NOT LOAD FAISS OR HUGGINGFACE HERE.
+# This endpoint does NOT load FAISS,
+# embeddings, PyTorch or Gemini.
 #
-# Render can call this endpoint to verify that the
-# Flask application is alive.
+# This makes it lightweight for deployment
+# health checks.
 # ============================================================
 
 @app.route(
@@ -138,7 +307,10 @@ def health():
             "ok",
 
         "application":
-            "DocuMind",
+            APP_NAME,
+
+        "version":
+            APP_VERSION,
 
         "description":
             "AI-Powered Document Question Answering System",
@@ -153,7 +325,7 @@ def health():
             "FAISS",
 
         "embedding_model":
-            "sentence-transformers/all-MiniLM-L6-v2",
+            EMBEDDING_MODEL,
 
         "llm":
             LLM_MODEL,
@@ -170,13 +342,7 @@ def health():
 # ============================================================
 # KNOWLEDGE BASE STATISTICS
 #
-# This only reads the PDF filenames.
-#
-# It DOES NOT load:
-# - Embedding model
-# - FAISS
-# - PyTorch
-# - Gemini
+# GET /api/stats
 # ============================================================
 
 @app.route(
@@ -191,6 +357,7 @@ def document_stats():
             get_document_stats()
         )
 
+
         return jsonify({
 
             "success":
@@ -200,18 +367,36 @@ def document_stats():
                 document_count,
 
             "documents":
-                documents
+                documents,
+
+            "vector_database":
+                "FAISS",
+
+            "framework":
+                "LangChain",
+
+            "embedding_model":
+                EMBEDDING_MODEL,
+
+            "llm":
+                LLM_MODEL
 
         }), 200
 
+
     except Exception as error:
 
+        print()
         print(
-            "Statistics error:",
+            "Statistics error:"
+        )
+
+        print(
             error
         )
 
         traceback.print_exc()
+
 
         return jsonify({
 
@@ -235,7 +420,6 @@ def document_stats():
 #     "question": "What is type casting?",
 #     "top_k": 4
 # }
-#
 # ============================================================
 
 @app.route(
@@ -248,10 +432,11 @@ def ask_question():
         time.perf_counter()
     )
 
+
     try:
 
         # ====================================================
-        # READ REQUEST
+        # READ JSON REQUEST
         # ====================================================
 
         data = (
@@ -259,6 +444,7 @@ def ask_question():
                 silent=True
             )
         )
+
 
         if not isinstance(
             data,
@@ -277,7 +463,7 @@ def ask_question():
 
 
         # ====================================================
-        # GET QUESTION
+        # QUESTION
         # ====================================================
 
         question = data.get(
@@ -373,9 +559,7 @@ def ask_question():
             top_k = 4
 
 
-        # ====================================================
-        # KEEP RETRIEVAL SIZE REASONABLE
-        # ====================================================
+        # Keep retrieval reasonable
 
         top_k = max(
             1,
@@ -387,28 +571,24 @@ def ask_question():
 
 
         # ====================================================
-        # LOG QUERY
+        # LOG REQUEST
         # ====================================================
 
         print()
+        print("=" * 70)
+
         print(
-            "=" * 65
+            "NEW DOCUMIND RAG REQUEST"
+        )
+
+        print("=" * 70)
+
+        print(
+            f"Question : {question}"
         )
 
         print(
-            "NEW RAG REQUEST"
-        )
-
-        print(
-            "=" * 65
-        )
-
-        print(
-            f"Question: {question}"
-        )
-
-        print(
-            f"Top-K: {top_k}"
+            f"Top-K    : {top_k}"
         )
 
 
@@ -425,7 +605,7 @@ def ask_question():
 
 
         # ====================================================
-        # RESPONSE TIME
+        # TOTAL RESPONSE TIME
         # ====================================================
 
         total_time = (
@@ -453,20 +633,22 @@ def ask_question():
                     [],
 
                 "documents":
-                    []
+                    [],
+
+                "retrieval_time":
+                    0,
+
+                "generation_time":
+                    0
 
             }
 
 
         # ====================================================
-        # SERIALIZATION
+        # SERIALIZE DOCUMENTS
         #
-        # IMPORTANT:
-        #
-        # LangChain Document objects cannot be directly
-        # serialized by Flask's jsonify().
-        #
-        # Convert them into clean JSON dictionaries.
+        # LangChain Document objects cannot directly
+        # be passed to jsonify().
         # ====================================================
 
         documents = (
@@ -492,6 +674,7 @@ def ask_question():
                     )
                 )
 
+
                 content = (
                     getattr(
                         document,
@@ -499,6 +682,7 @@ def ask_question():
                         ""
                     )
                 )
+
 
                 serialized_documents.append({
 
@@ -510,13 +694,14 @@ def ask_question():
 
                 })
 
+
             except Exception:
 
                 continue
 
 
         # ====================================================
-        # SOURCES
+        # SERIALIZE SOURCES
         # ====================================================
 
         sources = (
@@ -535,18 +720,24 @@ def ask_question():
             try:
 
                 if (
+
                     isinstance(
                         source,
                         (list, tuple)
                     )
+
                     and
+
                     len(source) >= 2
+
                 ):
 
                     serialized_sources.append({
 
                         "document":
-                            str(source[0]),
+                            str(
+                                source[0]
+                            ),
 
                         "page":
                             source[1]
@@ -559,13 +750,16 @@ def ask_question():
 
 
         # ====================================================
-        # FINAL API RESPONSE
+        # FINAL RESPONSE
         # ====================================================
 
         response = {
 
             "success":
                 True,
+
+            "application":
+                APP_NAME,
 
             "answer":
                 result.get(
@@ -611,7 +805,13 @@ def ask_question():
                 top_k,
 
             "llm":
-                LLM_MODEL
+                LLM_MODEL,
+
+            "embedding_model":
+                EMBEDDING_MODEL,
+
+            "vector_database":
+                "FAISS"
 
         }
 
@@ -621,20 +821,23 @@ def ask_question():
         # ====================================================
 
         print()
+
         print(
-            f"Retrieved chunks: "
+            f"Retrieved chunks : "
             f"{len(serialized_documents)}"
         )
 
         print(
-            f"Sources: "
+            f"Sources          : "
             f"{len(serialized_sources)}"
         )
 
         print(
-            f"Total response time: "
+            f"Total time       : "
             f"{total_time:.3f}s"
         )
+
+        print("=" * 70)
 
 
         return jsonify(
@@ -653,6 +856,7 @@ def ask_question():
             error
         )
 
+
         return jsonify({
 
             "success":
@@ -665,23 +869,19 @@ def ask_question():
 
 
     # ========================================================
-    # GOOGLE / LANGCHAIN / RAG ERRORS
+    # RAG / GEMINI / LANGCHAIN ERROR
     # ========================================================
 
     except Exception as error:
 
         print()
-        print(
-            "=" * 65
-        )
+        print("=" * 70)
 
         print(
-            "RAG APPLICATION ERROR"
+            "DOCUMIND RAG APPLICATION ERROR"
         )
 
-        print(
-            "=" * 65
-        )
+        print("=" * 70)
 
         print(
             f"Error: {error}"
@@ -703,7 +903,7 @@ def ask_question():
 
 
 # ============================================================
-# OPTIONAL API INFORMATION
+# API INFORMATION
 # ============================================================
 
 @app.route(
@@ -715,10 +915,13 @@ def api_info():
     return jsonify({
 
         "application":
-            "DocuMind",
+            APP_NAME,
+
+        "description":
+            "AI-Powered Multi-Document Question Answering System",
 
         "version":
-            "1.0.0",
+            APP_VERSION,
 
         "framework":
             "Flask",
@@ -730,10 +933,31 @@ def api_info():
             "FAISS",
 
         "embedding_model":
-            "sentence-transformers/all-MiniLM-L6-v2",
+            EMBEDDING_MODEL,
 
         "llm":
             LLM_MODEL,
+
+        "documents":
+            "Multi-document",
+
+        "features": [
+
+            "PDF Knowledge Base",
+
+            "Semantic Retrieval",
+
+            "FAISS Vector Search",
+
+            "Retrieval-Augmented Generation",
+
+            "Source Attribution",
+
+            "Google Gemini",
+
+            "Document Viewer"
+
+        ],
 
         "endpoints": {
 
@@ -750,7 +974,10 @@ def api_info():
                 "POST /api/ask",
 
             "information":
-                "GET /api/info"
+                "GET /api/info",
+
+            "document_viewer":
+                "GET /documents/<filename>"
 
         }
 
@@ -764,6 +991,8 @@ def api_info():
 @app.errorhandler(404)
 def not_found(error):
 
+    # API request
+
     if request.path.startswith(
         "/api/"
     ):
@@ -775,6 +1004,23 @@ def not_found(error):
 
             "error":
                 "API endpoint not found."
+
+        }), 404
+
+
+    # Document request
+
+    if request.path.startswith(
+        "/documents/"
+    ):
+
+        return jsonify({
+
+            "success":
+                False,
+
+            "error":
+                "Document not found."
 
         }), 404
 
@@ -847,7 +1093,15 @@ def handle_exception(error):
 
     print()
     print(
-        "Unhandled application error:"
+        "=" * 70
+    )
+
+    print(
+        "UNHANDLED APPLICATION ERROR"
+    )
+
+    print(
+        "=" * 70
     )
 
     print(
@@ -881,30 +1135,42 @@ if __name__ == "__main__":
         )
     )
 
+
     print()
-    print(
-        "=" * 65
-    )
+    print("=" * 70)
 
     print(
         "DOCUMIND RAG SERVER"
     )
 
+    print("=" * 70)
+
     print(
-        "=" * 65
+        f"Port             : {port}"
     )
 
     print(
-        f"Running on port: {port}"
+        f"LLM              : {LLM_MODEL}"
     )
 
     print(
-        "Debug mode: OFF"
+        f"Embedding        : {EMBEDDING_MODEL}"
     )
 
     print(
-        "=" * 65
+        f"Vector Database  : FAISS"
     )
+
+    print(
+        f"Documents        : {DOCUMENTS_DIR}"
+    )
+
+    print(
+        "Debug            : OFF"
+    )
+
+    print("=" * 70)
+
 
     app.run(
 

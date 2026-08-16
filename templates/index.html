@@ -12,8 +12,11 @@
 
     <title>DocuMind | AI Document Q&A</title>
 
-
     <style>
+
+        /* =========================================================
+           GLOBAL
+           ========================================================= */
 
         * {
             box-sizing: border-box;
@@ -21,365 +24,322 @@
             padding: 0;
         }
 
-
         body {
-
             font-family:
                 Inter,
                 Arial,
                 Helvetica,
                 sans-serif;
 
-            background:
-                #0b1020;
+            background: #080d1a;
 
-            color:
-                #e8ecf7;
+            color: #e8ecf7;
 
-            min-height:
-                100vh;
-
+            min-height: 100vh;
         }
 
+        button,
+        textarea,
+        select {
+            font-family: inherit;
+        }
+
+        a {
+            text-decoration: none;
+        }
+
+        /* =========================================================
+           APP
+           ========================================================= */
 
         .app {
-
-            max-width:
-                1400px;
-
-            margin:
-                auto;
-
-            padding:
-                24px;
-
+            width: 100%;
+            max-width: 1450px;
+            margin: auto;
+            padding: 24px;
         }
 
-
-        /* ==================================================
+        /* =========================================================
            HEADER
-           ================================================== */
+           ========================================================= */
 
         .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
 
-            display:
-                flex;
+            gap: 20px;
 
-            justify-content:
-                space-between;
-
-            align-items:
-                center;
-
-            gap:
-                20px;
-
-            margin-bottom:
-                24px;
-
+            margin-bottom: 22px;
         }
-
 
         .brand {
+            display: flex;
+            align-items: center;
 
-            display:
-                flex;
-
-            align-items:
-                center;
-
-            gap:
-                14px;
-
+            gap: 14px;
         }
-
 
         .logo {
+            width: 48px;
+            height: 48px;
 
-            width:
-                48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-            height:
-                48px;
-
-            border-radius:
-                14px;
-
-            display:
-                flex;
-
-            align-items:
-                center;
-
-            justify-content:
-                center;
+            border-radius: 14px;
 
             background:
-                #1d4ed8;
+                linear-gradient(
+                    135deg,
+                    #2563eb,
+                    #7c3aed
+                );
 
-            font-size:
-                24px;
+            font-size: 23px;
 
+            box-shadow:
+                0 8px 25px
+                rgba(37, 99, 235, 0.25);
         }
-
 
         .brand h1 {
-
-            font-size:
-                22px;
-
-            font-weight:
-                750;
-
+            font-size: 22px;
+            font-weight: 800;
         }
-
 
         .brand p {
-
-            color:
-                #8d98b3;
-
-            font-size:
-                13px;
-
-            margin-top:
-                3px;
-
+            color: #8d98b3;
+            font-size: 13px;
+            margin-top: 3px;
         }
-
 
         .status {
+            display: flex;
+            align-items: center;
 
-            display:
-                flex;
+            gap: 8px;
 
-            align-items:
-                center;
+            background: #10172a;
 
-            gap:
-                8px;
+            border: 1px solid #25304a;
 
-            background:
-                #11182b;
+            padding: 9px 14px;
 
-            border:
-                1px solid #25304a;
+            border-radius: 999px;
 
-            padding:
-                9px 13px;
+            font-size: 12px;
 
-            border-radius:
-                999px;
-
-            font-size:
-                13px;
-
-            color:
-                #b8c2d9;
-
+            color: #b8c2d9;
         }
-
 
         .status-dot {
+            width: 8px;
+            height: 8px;
 
-            width:
-                8px;
+            border-radius: 50%;
 
-            height:
-                8px;
+            background: #22c55e;
 
-            border-radius:
-                50%;
-
-            background:
-                #22c55e;
-
+            box-shadow:
+                0 0 10px
+                rgba(34, 197, 94, 0.7);
         }
 
-
-        /* ==================================================
+        /* =========================================================
            LAYOUT
-           ================================================== */
+           ========================================================= */
 
         .layout {
-
-            display:
-                grid;
+            display: grid;
 
             grid-template-columns:
-                300px 1fr;
+                300px minmax(0, 1fr);
 
-            gap:
-                22px;
-
+            gap: 22px;
         }
 
-
-        /* ==================================================
+        /* =========================================================
            SIDEBAR
-           ================================================== */
+           ========================================================= */
 
         .sidebar {
+            background: #10172a;
 
-            background:
-                #10172a;
+            border: 1px solid #25304a;
 
-            border:
-                1px solid #25304a;
+            border-radius: 18px;
 
-            border-radius:
-                18px;
+            padding: 20px;
 
-            padding:
-                20px;
+            height: fit-content;
 
-            height:
-                fit-content;
+            position: sticky;
 
+            top: 20px;
         }
-
 
         .sidebar-title {
+            font-size: 15px;
 
-            font-size:
-                14px;
+            font-weight: 750;
 
-            font-weight:
-                700;
-
-            margin-bottom:
-                5px;
-
+            margin-bottom: 5px;
         }
-
 
         .sidebar-subtitle {
+            color: #7f8ba8;
 
-            color:
-                #7f8ba8;
+            font-size: 12px;
 
-            font-size:
-                12px;
-
-            margin-bottom:
-                18px;
-
+            margin-bottom: 18px;
         }
 
+        /* =========================================================
+           STAT CARDS
+           ========================================================= */
 
         .stat-card {
+            background: #0b1020;
 
-            background:
-                #0b1020;
+            border: 1px solid #222c44;
 
-            border:
-                1px solid #222c44;
+            border-radius: 13px;
 
-            border-radius:
-                13px;
+            padding: 15px;
 
-            padding:
-                14px;
+            margin-bottom: 12px;
 
-            margin-bottom:
-                12px;
-
+            transition: 0.2s ease;
         }
 
+        .stat-card:hover {
+            border-color: #31558f;
+        }
 
         .stat-label {
+            color: #7f8ba8;
 
-            color:
-                #7f8ba8;
+            font-size: 10px;
 
-            font-size:
-                11px;
+            text-transform: uppercase;
 
-            text-transform:
-                uppercase;
-
-            letter-spacing:
-                0.5px;
-
+            letter-spacing: 0.7px;
         }
-
 
         .stat-value {
+            font-size: 22px;
 
-            font-size:
-                22px;
+            font-weight: 800;
 
-            font-weight:
-                750;
-
-            margin-top:
-                5px;
-
+            margin-top: 5px;
         }
 
+        /* =========================================================
+           DOCUMENT LIST
+           ========================================================= */
 
         .document-list {
-
-            margin-top:
-                18px;
-
+            margin-top: 20px;
         }
 
+        .document-list-title {
+            font-size: 14px;
+
+            font-weight: 750;
+
+            margin-bottom: 10px;
+        }
 
         .document-item {
+            display: flex;
 
-            display:
-                flex;
+            align-items: center;
 
-            align-items:
-                center;
+            gap: 9px;
 
-            gap:
-                9px;
+            width: 100%;
 
-            padding:
-                9px;
+            padding: 11px;
 
-            border-radius:
-                9px;
+            margin-bottom: 6px;
 
-            color:
-                #b9c2d7;
+            border-radius: 10px;
 
-            font-size:
-                12px;
+            background: #121b30;
 
-            margin-bottom:
-                5px;
+            border: 1px solid transparent;
 
-            background:
-                #121b30;
+            color: #b9c2d7;
 
+            font-size: 12px;
+
+            cursor: pointer;
+
+            transition:
+                background 0.2s ease,
+                border-color 0.2s ease,
+                transform 0.2s ease;
         }
 
+        .document-item:hover {
+            background: #17233d;
+
+            border-color: #31558f;
+
+            color: #ffffff;
+
+            transform: translateX(3px);
+        }
 
         .document-icon {
+            font-size: 16px;
 
-            font-size:
-                16px;
-
+            flex-shrink: 0;
         }
 
+        .document-name {
+            flex: 1;
 
-        /* ==================================================
+            min-width: 0;
+
+            overflow: hidden;
+
+            text-overflow: ellipsis;
+
+            white-space: nowrap;
+        }
+
+        .document-arrow {
+            color: #6f7e9e;
+
+            font-size: 14px;
+
+            opacity: 0;
+
+            transition: 0.2s ease;
+        }
+
+        .document-item:hover .document-arrow {
+            opacity: 1;
+
+            color: #60a5fa;
+        }
+
+        /* =========================================================
            MAIN
-           ================================================== */
+           ========================================================= */
 
         .main {
-
-            min-width:
-                0;
-
+            min-width: 0;
         }
 
+        /* =========================================================
+           HERO
+           ========================================================= */
 
         .hero {
-
             background:
                 linear-gradient(
                     135deg,
@@ -387,816 +347,584 @@
                     #10172a
                 );
 
-            border:
-                1px solid #25304a;
+            border: 1px solid #25304a;
 
-            border-radius:
-                18px;
+            border-radius: 18px;
 
-            padding:
-                28px;
+            padding: 30px;
 
-            margin-bottom:
-                18px;
-
+            margin-bottom: 18px;
         }
-
 
         .hero h2 {
+            font-size: 30px;
 
-            font-size:
-                28px;
+            line-height: 1.2;
 
-            line-height:
-                1.2;
-
-            margin-bottom:
-                9px;
-
+            margin-bottom: 10px;
         }
-
 
         .hero p {
+            color: #929db7;
 
-            color:
-                #929db7;
+            font-size: 14px;
 
-            font-size:
-                14px;
+            line-height: 1.7;
 
-            line-height:
-                1.7;
-
-            max-width:
-                760px;
-
+            max-width: 850px;
         }
 
+        .tech-stack {
+            display: flex;
 
-        /* ==================================================
-           QUESTION BOX
-           ================================================== */
+            flex-wrap: wrap;
+
+            gap: 8px;
+
+            margin-top: 18px;
+        }
+
+        .tech-badge {
+            background: #0b1020;
+
+            border: 1px solid #273552;
+
+            color: #9fb0d1;
+
+            padding: 6px 9px;
+
+            border-radius: 7px;
+
+            font-size: 11px;
+        }
+
+        /* =========================================================
+           QUESTION CARD
+           ========================================================= */
 
         .question-card {
+            background: #10172a;
 
-            background:
-                #10172a;
+            border: 1px solid #25304a;
 
-            border:
-                1px solid #25304a;
+            border-radius: 18px;
 
-            border-radius:
-                18px;
+            padding: 20px;
 
-            padding:
-                20px;
-
-            margin-bottom:
-                18px;
-
+            margin-bottom: 18px;
         }
-
 
         .label {
+            display: block;
 
-            display:
-                block;
+            font-size: 13px;
 
-            font-size:
-                13px;
+            font-weight: 700;
 
-            font-weight:
-                650;
-
-            margin-bottom:
-                9px;
-
+            margin-bottom: 9px;
         }
-
 
         textarea {
+            width: 100%;
 
-            width:
-                100%;
+            min-height: 125px;
 
-            min-height:
-                120px;
+            resize: vertical;
 
-            resize:
-                vertical;
+            background: #0b1020;
 
-            background:
-                #0b1020;
+            color: #edf1fa;
 
-            color:
-                #edf1fa;
+            border: 1px solid #293550;
 
-            border:
-                1px solid #293550;
+            border-radius: 12px;
 
-            border-radius:
-                12px;
+            padding: 15px;
 
-            padding:
-                14px;
+            outline: none;
 
-            outline:
-                none;
+            font-size: 14px;
 
-            font-family:
-                inherit;
+            line-height: 1.6;
 
-            font-size:
-                14px;
-
-            line-height:
-                1.6;
-
+            transition: 0.2s ease;
         }
-
 
         textarea:focus {
+            border-color: #3b82f6;
 
-            border-color:
-                #3b82f6;
-
+            box-shadow:
+                0 0 0 3px
+                rgba(59, 130, 246, 0.08);
         }
-
 
         .controls {
+            display: flex;
 
-            display:
-                flex;
+            align-items: center;
 
-            align-items:
-                center;
+            justify-content: space-between;
 
-            justify-content:
-                space-between;
+            gap: 12px;
 
-            gap:
-                12px;
-
-            margin-top:
-                13px;
-
+            margin-top: 13px;
         }
-
 
         .topk {
+            display: flex;
 
-            display:
-                flex;
+            align-items: center;
 
-            align-items:
-                center;
+            gap: 8px;
 
-            gap:
-                8px;
+            color: #8792ad;
 
-            color:
-                #8792ad;
-
-            font-size:
-                12px;
-
+            font-size: 12px;
         }
-
 
         select {
+            background: #0b1020;
 
-            background:
-                #0b1020;
+            color: #dce4f5;
 
-            color:
-                #dce4f5;
+            border: 1px solid #293550;
 
-            border:
-                1px solid #293550;
+            border-radius: 8px;
 
-            border-radius:
-                8px;
+            padding: 7px 9px;
 
-            padding:
-                7px 9px;
-
+            outline: none;
         }
-
-
-        button {
-
-            border:
-                none;
-
-            cursor:
-                pointer;
-
-            font-family:
-                inherit;
-
-        }
-
 
         .ask-button {
+            border: none;
 
-            background:
-                #2563eb;
+            cursor: pointer;
 
-            color:
-                white;
+            background: #2563eb;
 
-            padding:
-                11px 20px;
+            color: white;
 
-            border-radius:
-                10px;
+            padding: 12px 21px;
 
-            font-weight:
-                700;
+            border-radius: 10px;
 
-            transition:
-                0.2s;
+            font-weight: 750;
 
+            transition: 0.2s ease;
         }
-
 
         .ask-button:hover {
+            background: #1d4ed8;
 
-            background:
-                #1d4ed8;
-
+            transform: translateY(-1px);
         }
-
 
         .ask-button:disabled {
+            opacity: 0.6;
 
-            opacity:
-                0.6;
+            cursor: not-allowed;
 
-            cursor:
-                not-allowed;
-
+            transform: none;
         }
 
-
-        /* ==================================================
+        /* =========================================================
            LOADING
-           ================================================== */
+           ========================================================= */
 
         .loading {
+            display: none;
 
-            display:
-                none;
+            align-items: center;
 
-            align-items:
-                center;
+            gap: 10px;
 
-            gap:
-                10px;
+            color: #9eabc4;
 
-            color:
-                #9eabc4;
+            font-size: 13px;
 
-            font-size:
-                13px;
-
-            padding:
-                14px 0;
-
+            padding: 14px 0 2px;
         }
 
-
         .spinner {
+            width: 18px;
+            height: 18px;
 
-            width:
-                18px;
+            border: 2px solid #293550;
 
-            height:
-                18px;
+            border-top-color: #3b82f6;
 
-            border:
-                2px solid #293550;
-
-            border-top-color:
-                #3b82f6;
-
-            border-radius:
-                50%;
+            border-radius: 50%;
 
             animation:
                 spin 0.8s linear infinite;
-
         }
-
 
         @keyframes spin {
 
             to {
-                transform:
-                    rotate(360deg);
+                transform: rotate(360deg);
             }
 
         }
 
-
-        /* ==================================================
+        /* =========================================================
            ANSWER
-           ================================================== */
+           ========================================================= */
 
         .answer-card {
+            display: none;
 
-            display:
-                none;
+            background: #10172a;
 
-            background:
-                #10172a;
+            border: 1px solid #25304a;
 
-            border:
-                1px solid #25304a;
+            border-radius: 18px;
 
-            border-radius:
-                18px;
+            padding: 22px;
 
-            padding:
-                22px;
-
-            margin-bottom:
-                18px;
-
+            margin-bottom: 18px;
         }
-
 
         .section-header {
+            display: flex;
 
-            display:
-                flex;
+            align-items: center;
 
-            justify-content:
-                space-between;
+            justify-content: space-between;
 
-            align-items:
-                center;
-
-            gap:
-                10px;
-
-            margin-bottom:
-                16px;
-
+            margin-bottom: 16px;
         }
-
 
         .section-title {
+            font-size: 16px;
 
-            font-size:
-                15px;
-
-            font-weight:
-                750;
-
+            font-weight: 800;
         }
-
 
         .answer {
+            color: #d8deeb;
 
-            color:
-                #d8deeb;
+            line-height: 1.75;
 
-            line-height:
-                1.75;
-
-            font-size:
-                14px;
-
+            font-size: 14px;
         }
-
 
         .answer h1,
         .answer h2,
         .answer h3 {
+            margin: 18px 0 9px;
 
-            margin:
-                18px 0 9px;
-
-            color:
-                #f0f4fb;
-
+            color: #f0f4fb;
         }
-
 
         .answer p {
-
-            margin:
-                9px 0;
-
+            margin: 9px 0;
         }
-
 
         .answer ul,
         .answer ol {
-
             margin:
-                9px 0 9px 22px;
-
+                9px 0
+                9px 22px;
         }
-
 
         .answer code {
+            background: #080d19;
 
-            background:
-                #080d19;
+            color: #cbd5e1;
 
-            color:
-                #cbd5e1;
+            padding: 2px 5px;
 
-            padding:
-                2px 5px;
-
-            border-radius:
-                5px;
-
+            border-radius: 5px;
         }
 
-
-        /* ==================================================
-           CODE BLOCK
-           ================================================== */
+        /* =========================================================
+           CODE
+           ========================================================= */
 
         .code-block {
+            margin: 16px 0;
 
-            margin:
-                16px 0;
+            border: 1px solid #293550;
 
-            border:
-                1px solid #293550;
+            border-radius: 12px;
 
-            border-radius:
-                12px;
+            overflow: hidden;
 
-            overflow:
-                hidden;
-
-            background:
-                #080d19;
-
+            background: #080d19;
         }
-
 
         .code-header {
+            display: flex;
 
-            display:
-                flex;
+            align-items: center;
 
-            align-items:
-                center;
+            justify-content: space-between;
 
-            justify-content:
-                space-between;
+            padding: 9px 12px;
 
-            padding:
-                9px 12px;
+            background: #111827;
 
-            background:
-                #111827;
-
-            border-bottom:
-                1px solid #293550;
-
+            border-bottom: 1px solid #293550;
         }
-
 
         .code-title {
+            font-size: 11px;
 
-            font-size:
-                11px;
+            color: #9ba7bf;
 
-            color:
-                #9ba7bf;
+            text-transform: uppercase;
 
-            text-transform:
-                uppercase;
-
-            letter-spacing:
-                0.5px;
-
+            letter-spacing: 0.5px;
         }
-
 
         .copy-button {
+            border: none;
 
-            background:
-                #1e293b;
+            cursor: pointer;
 
-            color:
-                #cbd5e1;
+            background: #1e293b;
 
-            padding:
-                6px 9px;
+            color: #cbd5e1;
 
-            border-radius:
-                6px;
+            padding: 6px 9px;
 
-            font-size:
-                11px;
+            border-radius: 6px;
 
+            font-size: 11px;
         }
 
+        .copy-button:hover {
+            background: #334155;
+        }
 
         pre {
+            margin: 0;
 
-            margin:
-                0;
+            padding: 16px;
 
-            padding:
-                16px;
-
-            overflow-x:
-                auto;
+            overflow-x: auto;
 
             font-family:
-                "Consolas",
+                Consolas,
                 "Courier New",
                 monospace;
 
-            font-size:
-                13px;
+            font-size: 13px;
 
-            line-height:
-                1.6;
+            line-height: 1.6;
 
-            color:
-                #dbe4f3;
-
+            color: #dbe4f3;
         }
 
-
-        /* ==================================================
+        /* =========================================================
            SOURCES
-           ================================================== */
+           ========================================================= */
 
         .sources-card {
+            display: none;
 
-            display:
-                none;
+            background: #10172a;
 
-            background:
-                #10172a;
+            border: 1px solid #25304a;
 
-            border:
-                1px solid #25304a;
+            border-radius: 18px;
 
-            border-radius:
-                18px;
+            padding: 22px;
 
-            padding:
-                22px;
-
-            margin-bottom:
-                18px;
-
+            margin-bottom: 18px;
         }
-
 
         .source {
+            display: flex;
 
-            background:
-                #0b1020;
+            align-items: center;
 
-            border:
-                1px solid #222c44;
+            gap: 12px;
 
-            border-radius:
-                10px;
+            background: #0b1020;
 
-            padding:
-                12px;
+            border: 1px solid #222c44;
 
-            margin-bottom:
-                8px;
+            border-radius: 10px;
 
+            padding: 12px;
+
+            margin-bottom: 8px;
+
+            color: #dce5f5;
+
+            transition: 0.2s ease;
         }
 
+        .source:hover {
+            border-color: #31558f;
+
+            background: #111a2d;
+        }
+
+        .source-icon {
+            font-size: 18px;
+        }
+
+        .source-info {
+            flex: 1;
+        }
 
         .source-name {
+            font-size: 13px;
 
-            font-size:
-                13px;
-
-            font-weight:
-                650;
-
-            color:
-                #dce5f5;
-
+            font-weight: 650;
         }
-
 
         .source-page {
+            font-size: 11px;
 
-            font-size:
-                11px;
+            color: #7f8ba8;
 
-            color:
-                #7f8ba8;
-
-            margin-top:
-                4px;
-
+            margin-top: 4px;
         }
 
+        .source-open {
+            color: #60a5fa;
 
-        /* ==================================================
+            font-size: 12px;
+
+            font-weight: 700;
+        }
+
+        /* =========================================================
            METRICS
-           ================================================== */
+           ========================================================= */
 
         .metrics {
-
-            display:
-                grid;
+            display: grid;
 
             grid-template-columns:
                 repeat(3, 1fr);
 
-            gap:
-                10px;
-
+            gap: 10px;
         }
-
 
         .metric {
+            background: #0b1020;
 
-            background:
-                #0b1020;
+            border: 1px solid #222c44;
 
-            border:
-                1px solid #222c44;
+            border-radius: 10px;
 
-            border-radius:
-                10px;
-
-            padding:
-                12px;
-
+            padding: 12px;
         }
-
 
         .metric-label {
+            color: #7f8ba8;
 
-            color:
-                #7f8ba8;
+            font-size: 10px;
 
-            font-size:
-                10px;
-
-            text-transform:
-                uppercase;
-
+            text-transform: uppercase;
         }
-
 
         .metric-value {
+            margin-top: 5px;
 
-            margin-top:
-                5px;
+            font-size: 16px;
 
-            font-size:
-                16px;
-
-            font-weight:
-                700;
-
+            font-weight: 700;
         }
 
-
-        /* ==================================================
+        /* =========================================================
            ERROR
-           ================================================== */
+           ========================================================= */
 
         .error {
+            display: none;
 
-            display:
-                none;
+            background: #2a1115;
 
-            background:
-                #2a1115;
+            border: 1px solid #65232b;
 
-            border:
-                1px solid #65232b;
+            color: #ffb4bc;
 
-            color:
-                #ffb4bc;
+            padding: 13px;
 
-            padding:
-                13px;
+            border-radius: 10px;
 
-            border-radius:
-                10px;
+            margin-top: 12px;
 
-            margin-top:
-                12px;
-
-            font-size:
-                13px;
-
+            font-size: 13px;
         }
 
-
-        /* ==================================================
+        /* =========================================================
            FOOTER
-           ================================================== */
+           ========================================================= */
 
         .footer {
+            text-align: center;
 
-            text-align:
-                center;
+            color: #66728d;
 
-            color:
-                #66728d;
+            font-size: 11px;
 
-            font-size:
-                11px;
-
-            padding:
-                20px 0 5px;
-
+            padding: 20px 0 5px;
         }
 
-
-        /* ==================================================
+        /* =========================================================
            RESPONSIVE
-           ================================================== */
+           ========================================================= */
 
-        @media (
-            max-width: 900px
-        ) {
+        @media (max-width: 900px) {
 
             .layout {
-
-                grid-template-columns:
-                    1fr;
-
+                grid-template-columns: 1fr;
             }
 
             .sidebar {
+                position: static;
 
-                order:
-                    2;
-
+                order: 2;
             }
 
         }
 
-
-        @media (
-            max-width: 600px
-        ) {
+        @media (max-width: 600px) {
 
             .app {
-
-                padding:
-                    14px;
-
+                padding: 14px;
             }
 
             .header {
+                align-items: flex-start;
 
-                align-items:
-                    flex-start;
+                flex-direction: column;
+            }
 
-                flex-direction:
-                    column;
+            .status {
+                width: 100%;
 
+                justify-content: center;
+            }
+
+            .hero {
+                padding: 22px;
             }
 
             .hero h2 {
-
-                font-size:
-                    23px;
-
+                font-size: 24px;
             }
 
             .controls {
+                align-items: stretch;
 
-                align-items:
-                    stretch;
-
-                flex-direction:
-                    column;
-
+                flex-direction: column;
             }
 
             .ask-button {
-
-                width:
-                    100%;
-
+                width: 100%;
             }
 
             .metrics {
-
-                grid-template-columns:
-                    1fr;
-
+                grid-template-columns: 1fr;
             }
 
         }
@@ -1212,9 +940,9 @@
 <div class="app">
 
 
-    <!-- ==================================================
+    <!-- =========================================================
          HEADER
-         ================================================== -->
+         ========================================================= -->
 
     <header class="header">
 
@@ -1250,17 +978,16 @@
     </header>
 
 
-
-    <!-- ==================================================
-         MAIN LAYOUT
-         ================================================== -->
+    <!-- =========================================================
+         LAYOUT
+         ========================================================= -->
 
     <div class="layout">
 
 
-        <!-- ==================================================
+        <!-- =====================================================
              SIDEBAR
-             ================================================== -->
+             ===================================================== -->
 
         <aside class="sidebar">
 
@@ -1272,6 +999,8 @@
                 Indexed PDF documents
             </div>
 
+
+            <!-- DOCUMENT COUNT -->
 
             <div class="stat-card">
 
@@ -1289,6 +1018,8 @@
             </div>
 
 
+            <!-- VECTOR DATABASE -->
+
             <div class="stat-card">
 
                 <div class="stat-label">
@@ -1301,6 +1032,8 @@
 
             </div>
 
+
+            <!-- FRAMEWORK -->
 
             <div class="stat-card">
 
@@ -1315,18 +1048,18 @@
             </div>
 
 
+            <!-- DOCUMENTS -->
+
             <div class="document-list">
 
-                <div class="sidebar-title">
+                <div class="document-list-title">
                     Documents
                 </div>
 
                 <div id="documentList">
 
                     <div class="document-item">
-
-                        Loading documents...
-
+                        📄 Loading documents...
                     </div>
 
                 </div>
@@ -1336,17 +1069,16 @@
         </aside>
 
 
-
-        <!-- ==================================================
-             MAIN CONTENT
-             ================================================== -->
+        <!-- =====================================================
+             MAIN
+             ===================================================== -->
 
         <main class="main">
 
 
-            <!-- ==================================================
+            <!-- =================================================
                  HERO
-                 ================================================== -->
+                 ================================================= -->
 
             <section class="hero">
 
@@ -1356,22 +1088,53 @@
 
                 <p>
 
-                    DocuMind uses Retrieval-Augmented
-                    Generation with LangChain, FAISS,
-                    Hugging Face embeddings and Google
-                    Gemini to retrieve relevant information
-                    from your document knowledge base and
-                    generate grounded technical answers.
+                    DocuMind uses
+                    Retrieval-Augmented Generation
+                    with LangChain, FAISS,
+                    semantic embeddings and
+                    Google Gemini to retrieve
+                    relevant information from your
+                    document knowledge base and
+                    generate grounded technical
+                    answers.
 
                 </p>
+
+
+                <div class="tech-stack">
+
+                    <span class="tech-badge">
+                        Python
+                    </span>
+
+                    <span class="tech-badge">
+                        Flask
+                    </span>
+
+                    <span class="tech-badge">
+                        LangChain
+                    </span>
+
+                    <span class="tech-badge">
+                        FAISS
+                    </span>
+
+                    <span class="tech-badge">
+                        RAG
+                    </span>
+
+                    <span class="tech-badge">
+                        Google Gemini
+                    </span>
+
+                </div>
 
             </section>
 
 
-
-            <!-- ==================================================
+            <!-- =================================================
                  QUESTION
-                 ================================================== -->
+                 ================================================= -->
 
             <section class="question-card">
 
@@ -1391,13 +1154,11 @@
 
                 <div class="controls">
 
-
                     <div class="topk">
 
                         <span>
                             Retrieved chunks:
                         </span>
-
 
                         <select id="topK">
 
@@ -1434,11 +1195,8 @@
                         id="askButton"
                         onclick="askQuestion()"
                     >
-
                         Ask DocuMind →
-
                     </button>
-
 
                 </div>
 
@@ -1450,7 +1208,8 @@
 
                     <div class="spinner"></div>
 
-                    Searching documents and generating answer...
+                    Searching documents and
+                    generating answer...
 
                 </div>
 
@@ -1463,10 +1222,9 @@
             </section>
 
 
-
-            <!-- ==================================================
+            <!-- =================================================
                  ANSWER
-                 ================================================== -->
+                 ================================================= -->
 
             <section
                 class="answer-card"
@@ -1490,10 +1248,9 @@
             </section>
 
 
-
-            <!-- ==================================================
+            <!-- =================================================
                  SOURCES
-                 ================================================== -->
+                 ================================================= -->
 
             <section
                 class="sources-card"
@@ -1509,17 +1266,14 @@
                 </div>
 
 
-                <div
-                    id="sources"
-                ></div>
+                <div id="sources"></div>
 
             </section>
 
 
-
-            <!-- ==================================================
+            <!-- =================================================
                  METRICS
-                 ================================================== -->
+                 ================================================= -->
 
             <section
                 class="sources-card"
@@ -1536,7 +1290,6 @@
 
 
                 <div class="metrics">
-
 
                     <div class="metric">
 
@@ -1585,7 +1338,6 @@
 
                     </div>
 
-
                 </div>
 
             </section>
@@ -1596,14 +1348,14 @@
     </div>
 
 
-    <!-- ==================================================
+    <!-- =========================================================
          FOOTER
-         ================================================== -->
+         ========================================================= -->
 
     <div class="footer">
 
         DocuMind · LangChain RAG · FAISS ·
-        Hugging Face · Google Gemini
+        Semantic Embeddings · Google Gemini
 
     </div>
 
@@ -1611,13 +1363,12 @@
 </div>
 
 
-
 <script>
 
 
-    // =====================================================
-    // LOAD KNOWLEDGE BASE
-    // =====================================================
+    /* =========================================================
+       LOAD KNOWLEDGE BASE
+       ========================================================= */
 
     async function loadDocuments() {
 
@@ -1665,7 +1416,7 @@
 
                 list.innerHTML = `
                     <div class="document-item">
-                        No PDF documents found.
+                        📄 No PDF documents found.
                     </div>
                 `;
 
@@ -1674,12 +1425,16 @@
             }
 
 
+            /*
+             * CREATE CLICKABLE PDF DOCUMENTS
+             */
+
             data.documents.forEach(
-                function (documentName) {
+                function(documentName) {
 
                     const item =
                         document.createElement(
-                            "div"
+                            "a"
                         );
 
 
@@ -1687,13 +1442,51 @@
                         "document-item";
 
 
+                    /*
+                     * Flask PDF route
+                     */
+
+                    item.href =
+                        "/documents/" +
+                        encodeURIComponent(
+                            documentName
+                        );
+
+
+                    /*
+                     * Open PDF in new tab
+                     */
+
+                    item.target =
+                        "_blank";
+
+
+                    item.rel =
+                        "noopener noreferrer";
+
+
                     item.innerHTML = `
-                        <span class="document-icon">
+
+                        <span
+                            class="document-icon"
+                        >
                             📄
                         </span>
-                        <span>
-                            ${escapeHtml(documentName)}
+
+                        <span
+                            class="document-name"
+                        >
+                            ${escapeHtml(
+                                documentName
+                            )}
                         </span>
+
+                        <span
+                            class="document-arrow"
+                        >
+                            ↗
+                        </span>
+
                     `;
 
 
@@ -1716,9 +1509,13 @@
             document.getElementById(
                 "documentList"
             ).innerHTML = `
+
                 <div class="document-item">
-                    Unable to load documents.
+
+                    ❌ Unable to load documents.
+
                 </div>
+
             `;
 
         }
@@ -1726,10 +1523,9 @@
     }
 
 
-
-    // =====================================================
-    // ASK QUESTION
-    // =====================================================
+    /* =========================================================
+       ASK QUESTION
+       ========================================================= */
 
     async function askQuestion() {
 
@@ -1769,10 +1565,6 @@
             );
 
 
-        // -------------------------------------------------
-        // VALIDATION
-        // -------------------------------------------------
-
         if (!question) {
 
             showError(
@@ -1786,9 +1578,9 @@
         }
 
 
-        // -------------------------------------------------
-        // RESET UI
-        // -------------------------------------------------
+        /*
+         * RESET
+         */
 
         errorBox.style.display =
             "none";
@@ -1826,9 +1618,9 @@
 
         try {
 
-            // ---------------------------------------------
-            // API REQUEST
-            // ---------------------------------------------
+            /*
+             * API REQUEST
+             */
 
             const response =
                 await fetch(
@@ -1877,9 +1669,9 @@
             }
 
 
-            // ---------------------------------------------
-            // DISPLAY ANSWER
-            // ---------------------------------------------
+            /*
+             * DISPLAY ANSWER
+             */
 
             document.getElementById(
                 "answer"
@@ -1895,18 +1687,18 @@
                 "block";
 
 
-            // ---------------------------------------------
-            // DISPLAY SOURCES
-            // ---------------------------------------------
+            /*
+             * DISPLAY SOURCES
+             */
 
             renderSources(
                 data.sources || []
             );
 
 
-            // ---------------------------------------------
-            // DISPLAY METRICS
-            // ---------------------------------------------
+            /*
+             * DISPLAY METRICS
+             */
 
             document.getElementById(
                 "retrievalTime"
@@ -1951,6 +1743,7 @@
                 "Something went wrong."
             );
 
+
         } finally {
 
             loading.style.display =
@@ -1969,10 +1762,9 @@
     }
 
 
-
-    // =====================================================
-    // RENDER SOURCES
-    // =====================================================
+    /* =========================================================
+       RENDER SOURCES
+       ========================================================= */
 
     function renderSources(
         sources
@@ -2000,10 +1792,15 @@
         ) {
 
             sourcesContainer.innerHTML = `
+
                 <div class="source">
+
                     No document sources returned.
+
                 </div>
+
             `;
+
 
             sourcesCard.style.display =
                 "block";
@@ -2013,12 +1810,61 @@
         }
 
 
+        /*
+         * Remove duplicate sources
+         */
+
+        const uniqueSources = [];
+
+
+        const seen = new Set();
+
+
         sources.forEach(
-            function (source) {
+            function(source) {
+
+                const documentName =
+                    source.document ||
+                    "Unknown document";
+
+
+                const page =
+                    source.page ??
+                    "Unknown";
+
+
+                const key =
+                    documentName +
+                    "|" +
+                    page;
+
+
+                if (!seen.has(key)) {
+
+                    seen.add(key);
+
+                    uniqueSources.push(
+                        {
+                            document:
+                                documentName,
+
+                            page:
+                                page
+                        }
+                    );
+
+                }
+
+            }
+        );
+
+
+        uniqueSources.forEach(
+            function(source) {
 
                 const item =
                     document.createElement(
-                        "div"
+                        "a"
                     );
 
 
@@ -2026,29 +1872,103 @@
                     "source";
 
 
+                /*
+                 * Open exact PDF page
+                 *
+                 * Browser PDF viewers support:
+                 *
+                 * #page=2
+                 */
+
+                let pageNumber =
+                    parseInt(
+                        source.page
+                    );
+
+
+                /*
+                 * Your backend may return
+                 * zero-based page numbers.
+                 *
+                 * Convert to browser page.
+                 */
+
+                if (
+                    !isNaN(pageNumber)
+                ) {
+
+                    pageNumber =
+                        pageNumber + 1;
+
+                }
+
+
+                let url =
+                    "/documents/" +
+                    encodeURIComponent(
+                        source.document
+                    );
+
+
+                if (
+                    !isNaN(pageNumber)
+                ) {
+
+                    url +=
+                        "#page=" +
+                        pageNumber;
+
+                }
+
+
+                item.href =
+                    url;
+
+
+                item.target =
+                    "_blank";
+
+
+                item.rel =
+                    "noopener noreferrer";
+
+
                 item.innerHTML = `
 
-                    <div class="source-name">
-
+                    <span class="source-icon">
                         📄
-                        ${escapeHtml(
-                            source.document ||
-                            "Unknown document"
-                        )}
+                    </span>
 
-                    </div>
+                    <span class="source-info">
 
-                    <div class="source-page">
+                        <div
+                            class="source-name"
+                        >
+                            ${escapeHtml(
+                                source.document
+                            )}
+                        </div>
 
-                        Page
-                        ${escapeHtml(
-                            String(
-                                source.page ??
-                                "Unknown"
-                            )
-                        )}
+                        <div
+                            class="source-page"
+                        >
+                            Page
+                            ${escapeHtml(
+                                String(
+                                    pageNumber ||
+                                    source.page ||
+                                    "Unknown"
+                                )
+                            )}
+                        </div>
 
-                    </div>
+                    </span>
+
+                    <span
+                        class="source-open"
+                    >
+                        View ↗
+                    </span>
 
                 `;
 
@@ -2067,10 +1987,9 @@
     }
 
 
-
-    // =====================================================
-    // TIME FORMAT
-    // =====================================================
+    /* =========================================================
+       FORMAT TIME
+       ========================================================= */
 
     function formatTime(
         value
@@ -2094,10 +2013,9 @@
     }
 
 
-
-    // =====================================================
-    // SIMPLE MARKDOWN RENDERER
-    // =====================================================
+    /* =========================================================
+       MARKDOWN RENDERER
+       ========================================================= */
 
     function renderMarkdown(
         text
@@ -2116,9 +2034,9 @@
             );
 
 
-        // ---------------------------------------------
-        // CODE BLOCKS
-        // ---------------------------------------------
+        /*
+         * CODE BLOCKS
+         */
 
         const codeBlocks = [];
 
@@ -2128,7 +2046,7 @@
 
                 /```(?:python)?\s*([\s\S]*?)```/gi,
 
-                function (
+                function(
                     match,
                     code
                 ) {
@@ -2143,40 +2061,49 @@
                     );
 
 
-                    return (
-                        `<div class="code-block">` +
+                    return `
 
-                        `<div class="code-header">` +
+                        <div
+                            class="code-block"
+                        >
 
-                        `<span class="code-title">` +
-                        `Python` +
-                        `</span>` +
+                            <div
+                                class="code-header"
+                            >
 
-                        `<button ` +
-                        `class="copy-button" ` +
-                        `onclick="copyCode('${id}')">` +
-                        `Copy` +
-                        `</button>` +
+                                <span
+                                    class="code-title"
+                                >
+                                    Python
+                                </span>
 
-                        `</div>` +
+                                <button
+                                    class="copy-button"
+                                    onclick="copyCode('${id}')"
+                                >
+                                    Copy
+                                </button>
 
-                        `<pre id="${id}">` +
-                        escapeHtml(
-                            code.trim()
-                        ) +
-                        `</pre>` +
+                            </div>
 
-                        `</div>`
-                    );
+                            <pre
+                                id="${id}"
+                            >${escapeHtml(
+                                code.trim()
+                            )}</pre>
+
+                        </div>
+
+                    `;
 
                 }
 
             );
 
 
-        // ---------------------------------------------
-        // HEADINGS
-        // ---------------------------------------------
+        /*
+         * HEADINGS
+         */
 
         html =
             html.replace(
@@ -2199,9 +2126,9 @@
             );
 
 
-        // ---------------------------------------------
-        // BOLD
-        // ---------------------------------------------
+        /*
+         * BOLD
+         */
 
         html =
             html.replace(
@@ -2210,9 +2137,9 @@
             );
 
 
-        // ---------------------------------------------
-        // INLINE CODE
-        // ---------------------------------------------
+        /*
+         * INLINE CODE
+         */
 
         html =
             html.replace(
@@ -2221,9 +2148,9 @@
             );
 
 
-        // ---------------------------------------------
-        // BULLET LIST
-        // ---------------------------------------------
+        /*
+         * BULLET LIST
+         */
 
         html =
             html.replace(
@@ -2239,9 +2166,9 @@
             );
 
 
-        // ---------------------------------------------
-        // NUMBERED LIST
-        // ---------------------------------------------
+        /*
+         * NUMBERED LIST
+         */
 
         html =
             html.replace(
@@ -2250,9 +2177,9 @@
             );
 
 
-        // ---------------------------------------------
-        // LINE BREAKS
-        // ---------------------------------------------
+        /*
+         * LINE BREAKS
+         */
 
         html =
             html.replace(
@@ -2273,10 +2200,9 @@
     }
 
 
-
-    // =====================================================
-    // COPY CODE
-    // =====================================================
+    /* =========================================================
+       COPY CODE
+       ========================================================= */
 
     async function copyCode(
         id
@@ -2302,6 +2228,46 @@
             );
 
 
+            const buttons =
+                document.querySelectorAll(
+                    ".copy-button"
+                );
+
+
+            buttons.forEach(
+                function(button) {
+
+                    if (
+                        button.getAttribute(
+                            "onclick"
+                        ) ===
+                        `copyCode('${id}')`
+                    ) {
+
+                        const original =
+                            button.textContent;
+
+
+                        button.textContent =
+                            "Copied!";
+
+
+                        setTimeout(
+                            function() {
+
+                                button.textContent =
+                                    original;
+
+                            },
+                            1200
+                        );
+
+                    }
+
+                }
+            );
+
+
         } catch (error) {
 
             console.error(
@@ -2314,10 +2280,9 @@
     }
 
 
-
-    // =====================================================
-    // ERROR DISPLAY
-    // =====================================================
+    /* =========================================================
+       ERROR
+       ========================================================= */
 
     function showError(
         message
@@ -2339,10 +2304,9 @@
     }
 
 
-
-    // =====================================================
-    // HTML ESCAPING
-    // =====================================================
+    /* =========================================================
+       HTML ESCAPING
+       ========================================================= */
 
     function escapeHtml(
         value
@@ -2351,34 +2315,33 @@
         return String(
             value ?? ""
         )
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-        .replace(
-            /</g,
-            "&lt;"
-        )
-        .replace(
-            />/g,
-            "&gt;"
-        )
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-        .replace(
-            /'/g,
-            "&#039;"
-        );
+            .replace(
+                /&/g,
+                "&amp;"
+            )
+            .replace(
+                /</g,
+                "&lt;"
+            )
+            .replace(
+                />/g,
+                "&gt;"
+            )
+            .replace(
+                /"/g,
+                "&quot;"
+            )
+            .replace(
+                /'/g,
+                "&#039;"
+            );
 
     }
 
 
-
-    // =====================================================
-    // ENTER KEY
-    // =====================================================
+    /* =========================================================
+       ENTER KEY
+       ========================================================= */
 
     document
         .getElementById(
@@ -2386,7 +2349,7 @@
         )
         .addEventListener(
             "keydown",
-            function (event) {
+            function(event) {
 
                 if (
                     event.key ===
@@ -2405,10 +2368,9 @@
         );
 
 
-
-    // =====================================================
-    // INITIALIZE
-    // =====================================================
+    /* =========================================================
+       INITIALIZE
+       ========================================================= */
 
     loadDocuments();
 
