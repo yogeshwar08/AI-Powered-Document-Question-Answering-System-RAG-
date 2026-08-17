@@ -10,7 +10,7 @@
 # 4. SEMANTIC EMBEDDING
 # 5. FAISS VECTOR DATABASE
 # 6. USER QUERY
-# 7. SEMANTIC RETRIEVAL
+# 7. HYBRID RETRIEVAL
 # 8. CONTEXT AUGMENTATION
 # 9. ANSWER GENERATION
 #
@@ -19,6 +19,8 @@
 # - LangChain
 # - Gemini Embedding 2
 # - FAISS
+# - BM25 keyword retrieval
+# - Reciprocal Rank Fusion (RRF)
 # - Google GenAI SDK
 # - No local PyTorch / Sentence Transformers
 # - Existing FAISS database loaded at runtime
@@ -33,6 +35,7 @@
 # ============================================================
 
 import os
+import re
 import time
 
 from functools import lru_cache
@@ -109,6 +112,9 @@ from langchain_core.embeddings import (
 from langchain_community.vectorstores import (
     FAISS
 )
+
+# BM25 keyword retrieval
+from rank_bm25 import BM25Okapi
 
 
 # ============================================================
@@ -264,6 +270,11 @@ DEFAULT_TOP_K = int(
 
 
 MAX_TOP_K = 10
+
+
+# Hybrid retrieval configuration
+HYBRID_CANDIDATES = int(os.getenv("HYBRID_CANDIDATES", "8"))
+RRF_K = int(os.getenv("RRF_K", "60"))
 
 
 # ============================================================
@@ -1324,174 +1335,210 @@ def validate_query(
 # SEMANTIC RETRIEVAL
 # ============================================================
 
+def _keyword_tokens(text):
+    """Normalize text into tokens for BM25 lexical retrieval."""
+    if not text:
+        return []
+
+    return re.findall(
+        r"[a-zA-Z0-9_+#.-]+",
+        text.lower()
+    )
+
+
+@lru_cache(maxsize=1)
+def load_keyword_index():
+    """
+    Build a BM25 index from the same LangChain Documents stored
+    inside the existing FAISS database.
+
+    This does NOT create another embedding database and does NOT
+    call Gemini. The index is created once per application process.
+    """
+    vectorstore = load_vectorstore()
+
+    documents = [
+        document
+        for document in vectorstore.docstore._dict.values()
+        if getattr(document, "page_content", "").strip()
+    ]
+
+    if not documents:
+        raise RuntimeError(
+            "No documents are available for BM25 keyword retrieval."
+        )
+
+    tokenized_documents = [
+        _keyword_tokens(document.page_content)
+        for document in documents
+    ]
+
+    bm25 = BM25Okapi(tokenized_documents)
+
+    print()
+    print("✓ BM25 keyword index initialized.")
+    print(f"  Indexed chunks: {len(documents)}")
+
+    return bm25, documents
+
+
+def _document_key(document):
+    """Create a stable key so hybrid retrieval can remove duplicates."""
+    metadata = getattr(document, "metadata", {}) or {}
+    source = metadata.get("source", "")
+    page = metadata.get("page", metadata.get("page_number", ""))
+    content = getattr(document, "page_content", "")
+
+    return (
+        str(source),
+        str(page),
+        content.strip()
+    )
+
+
+def _rrf_fuse(semantic_documents, keyword_documents, k):
+    """
+    Reciprocal Rank Fusion (RRF) combines semantic and keyword
+    rankings without comparing incompatible score scales.
+    """
+    scores = {}
+    documents = {}
+
+    for rank, document in enumerate(semantic_documents, start=1):
+        key = _document_key(document)
+        scores[key] = scores.get(key, 0.0) + (
+            1.0 / (RRF_K + rank)
+        )
+        documents[key] = document
+
+    for rank, document in enumerate(keyword_documents, start=1):
+        key = _document_key(document)
+        scores[key] = scores.get(key, 0.0) + (
+            1.0 / (RRF_K + rank)
+        )
+        documents[key] = document
+
+    ranked_keys = sorted(
+        scores,
+        key=scores.get,
+        reverse=True
+    )
+
+    return [
+        documents[key]
+        for key in ranked_keys[:k]
+    ]
+
+
 def retrieve_documents(
     question,
     k=DEFAULT_TOP_K
 ):
+    """Hybrid retrieval: FAISS semantic search + BM25 keyword search."""
 
     print()
+    print("=" * 65)
+    print("STEP 7: HYBRID RETRIEVAL")
+    print("=" * 65)
 
-    print(
-        "=" * 65
-    )
-
-    print(
-        "STEP 7: SEMANTIC RETRIEVAL"
-    )
-
-    print(
-        "=" * 65
-    )
-
-
-    question = (
-
-        validate_query(
-
-            question
-
-        )
-
-    )
-
+    question = validate_query(question)
 
     try:
-
         k = int(k)
-
-    except (
-
-        TypeError,
-
-        ValueError
-
-    ):
-
+    except (TypeError, ValueError):
         k = DEFAULT_TOP_K
 
+    k = max(1, min(k, MAX_TOP_K))
 
-    k = max(
-
-        1,
-
-        min(
-
-            k,
-
-            MAX_TOP_K
-
-        )
-
+    candidate_k = max(
+        k,
+        min(HYBRID_CANDIDATES, MAX_TOP_K)
     )
 
+    print(f"Query           : {question}")
+    print(f"Final Top-K     : {k}")
+    print(f"Hybrid candidates: {candidate_k}")
+
+    vectorstore = load_vectorstore()
+
+    # ------------------------------------------------------------
+    # 1. SEMANTIC RETRIEVAL — FAISS
+    # ------------------------------------------------------------
+    semantic_retriever = vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": candidate_k}
+    )
+
+    semantic_documents = semantic_retriever.invoke(question)
 
     print(
-
-        f"Query  : {question}"
-
+        f"Semantic results: {len(semantic_documents)}"
     )
 
+    # ------------------------------------------------------------
+    # 2. KEYWORD RETRIEVAL — BM25
+    # ------------------------------------------------------------
+    bm25, all_documents = load_keyword_index()
+
+    query_tokens = _keyword_tokens(question)
+
+    if query_tokens:
+        keyword_scores = bm25.get_scores(query_tokens)
+        ranked_indices = sorted(
+            range(len(keyword_scores)),
+            key=lambda index: keyword_scores[index],
+            reverse=True
+        )[:candidate_k]
+
+        keyword_documents = [
+            all_documents[index]
+            for index in ranked_indices
+        ]
+    else:
+        keyword_documents = []
 
     print(
-
-        f"Top-K  : {k}"
-
+        f"Keyword results : {len(keyword_documents)}"
     )
 
-
-    vectorstore = (
-
-        load_vectorstore()
-
+    # ------------------------------------------------------------
+    # 3. RECIPROCAL RANK FUSION
+    # ------------------------------------------------------------
+    documents = _rrf_fuse(
+        semantic_documents,
+        keyword_documents,
+        k
     )
-
-
-    retriever = (
-
-        vectorstore.as_retriever(
-
-            search_type="similarity",
-
-            search_kwargs={
-
-                "k": k
-
-            }
-
-        )
-
-    )
-
-
-    documents = (
-
-        retriever.invoke(
-
-            question
-
-        )
-
-    )
-
 
     print()
-
     print(
-
-        f"Relevant chunks retrieved: "
-        f"{len(documents)}"
-
+        f"Hybrid results  : {len(documents)}"
     )
 
-
     for index, document in enumerate(
-
         documents,
-
         start=1
-
     ):
-
-        source = (
-
-            document.metadata.get(
-
-                "source",
-
-                "Unknown"
-
-            )
-
+        metadata = (
+            getattr(document, "metadata", {}) or {}
         )
 
-
-        page = (
-
-            document.metadata.get(
-
-                "page",
-
-                "Unknown"
-
-            )
-
+        source = metadata.get(
+            "source",
+            metadata.get("file_name", "Unknown")
         )
 
+        page = metadata.get(
+            "page",
+            metadata.get("page_number", "Unknown")
+        )
 
-        # PyPDFLoader uses zero-based page indexes.
         if isinstance(page, int):
-
             page += 1
 
-
         print(
-
-            f"  {index}. "
-            f"{source} | "
-            f"Page {page}"
-
+            f"  {index}. {source} | Page {page}"
         )
-
 
     return documents
 

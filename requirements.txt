@@ -9,3 +9,4 @@ faiss-cpu
 pypdf
 google-genai
 python-dotenv
+rank-bm25
